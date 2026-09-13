@@ -1,0 +1,836 @@
+<title>팀 피드백 스튜디오</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;700&display=swap">
+<style>
+:root{
+  --paper:#EEF1EF; --paper-raised:#FFFFFF; --ink:#16211D; --ink-soft:#4B5B54; --line:#D7DED9;
+  --accent:#0E6E5C; --accent-strong:#0B564A; --accent-soft:#DCEEE9;
+  --gold:#9C7A1E; --gold-soft:#F3E6C8; --clay:#B1512E; --clay-soft:#F4DFD3;
+  --radius:14px; --shadow:0 1px 2px rgba(22,33,29,.06), 0 8px 24px rgba(22,33,29,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#101A17; --paper-raised:#182722; --ink:#ECF0EC; --ink-soft:#9FB2A9; --line:#28372F;
+    --accent:#3FCDAA; --accent-strong:#6EE0C4; --accent-soft:rgba(63,205,170,.16);
+    --gold:#E3B24E; --gold-soft:rgba(227,178,78,.16); --clay:#E58A63; --clay-soft:rgba(229,138,99,.16);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101A17; --paper-raised:#182722; --ink:#ECF0EC; --ink-soft:#9FB2A9; --line:#28372F;
+  --accent:#3FCDAA; --accent-strong:#6EE0C4; --accent-soft:rgba(63,205,170,.16);
+  --gold:#E3B24E; --gold-soft:rgba(227,178,78,.16); --clay:#E58A63; --clay-soft:rgba(229,138,99,.16);
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box;}
+html,body{margin:0; padding:0;}
+body{background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',sans-serif;}
+h1,h2,h3{font-family:'Noto Serif KR',serif; text-wrap:balance; margin:0 0 .4em;}
+button{font-family:inherit;}
+a{color:var(--accent);}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+.muted{color:var(--ink-soft);}
+.small{font-size:.82rem;}
+.mono{font-variant-numeric:tabular-nums;}
+
+.landing{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem 1.25rem;}
+.landing-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); padding:2.5rem 2rem; max-width:380px; width:100%; text-align:center;}
+.wordmark-eyebrow{text-transform:uppercase; letter-spacing:.12em; font-size:.72rem; color:var(--accent); font-weight:700; margin:0 0 .6rem;}
+.wordmark{font-size:2.6rem; letter-spacing:.02em; margin:0 0 .25rem;}
+.wordmark-sm{font-size:1.5rem; margin-bottom:.75rem;}
+.tagline{color:var(--ink-soft); margin:0 0 1.75rem;}
+.landing-actions{display:flex; flex-direction:column; gap:.6rem; margin-top:1.25rem;}
+.notice{margin-top:1.25rem; font-size:.78rem; color:var(--ink-soft);}
+
+.btn{border:none; border-radius:12px; padding:.85rem 1.1rem; font-size:.95rem; font-weight:700; cursor:pointer; transition:transform .1s ease, background .15s ease; display:inline-block; text-decoration:none; text-align:center;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--accent); color:#fff;}
+.btn-primary:hover{background:var(--accent-strong);}
+.btn-ghost{background:transparent; border:1px solid var(--line); color:var(--ink);}
+.btn-ghost:hover{border-color:var(--accent); color:var(--accent);}
+.btn-block{width:100%;}
+.btn-sm{padding:.5rem .8rem; font-size:.82rem;}
+.btn-team{background:var(--paper); border:1.5px solid var(--line); border-radius:12px; padding:1rem; font-size:1.05rem; font-weight:700; cursor:pointer; color:var(--ink);}
+.btn-team:hover{border-color:var(--accent); color:var(--accent);}
+
+.team-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:.65rem; margin-top:1rem;}
+
+.input{width:100%; border:1.5px solid var(--line); border-radius:10px; padding:.8rem 1rem; font-size:1rem; background:var(--paper-raised); color:var(--ink); margin-top:1rem;}
+.input:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+.input-lg{text-align:center; font-size:1.3rem; letter-spacing:.15em;}
+.form-error{color:var(--clay); font-size:.85rem; min-height:1.2em; margin-top:.5rem;}
+.link-sm{display:inline-block; margin-top:.4rem; font-size:.85rem; text-decoration:none;}
+
+.sbar{display:flex; align-items:center; gap:.6rem; padding:.9rem 1.1rem; border-bottom:1px solid var(--line); background:var(--paper-raised); position:sticky; top:0; z-index:5;}
+.sbar-brand{font-family:'Noto Serif KR',serif; font-weight:700;}
+.tbar-tagline{font-family:'Noto Sans KR',sans-serif; font-weight:400; font-size:.78rem; color:var(--ink-soft); margin-left:.3rem;}
+.sbar-team{margin-left:auto; background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:.8rem; padding:.25rem .6rem; border-radius:999px;}
+.student-main{max-width:520px; margin:0 auto; padding:1.5rem 1.1rem 3rem;}
+.center-msg{min-height:50vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:.4rem;}
+.eyebrow{text-transform:uppercase; letter-spacing:.1em; font-size:.72rem; color:var(--accent); font-weight:700; margin:0 0 .3rem;}
+
+.fb-form .q{font-size:1rem; margin:1.5rem 0 .6rem;}
+.hint{color:var(--ink-soft); font-weight:400; font-size:.85rem;}
+.chip-group{display:flex; flex-wrap:wrap; gap:.5rem;}
+.chip{border:1.5px solid var(--line); background:var(--paper-raised); color:var(--ink); border-radius:999px; padding:.55rem 1rem; font-size:.88rem; cursor:pointer;}
+.chip:disabled{opacity:.4; cursor:not-allowed;}
+.chip-on{background:var(--accent-soft); border-color:var(--accent); color:var(--accent);}
+.chip-on.chip-gold{background:var(--gold-soft); border-color:var(--gold); color:var(--gold);}
+.chip-on.chip-clay{background:var(--clay-soft); border-color:var(--clay); color:var(--clay);}
+.chip-warn{min-height:1.1em; color:var(--clay); font-size:.8rem; margin-top:.4rem;}
+.textarea{width:100%; min-height:88px; border:1.5px solid var(--line); border-radius:12px; padding:.8rem 1rem; font-size:.95rem; margin-top:.6rem; font-family:inherit; resize:vertical; background:var(--paper-raised); color:var(--ink);}
+.textarea:focus{outline:2px solid var(--accent); outline-offset:1px;}
+.counter{text-align:right; font-size:.78rem; color:var(--ink-soft); margin-top:.3rem;}
+.submitted-tag{display:inline-block; background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:.8rem; padding:.3rem .7rem; border-radius:999px; margin-bottom:.5rem;}
+
+.bars{display:flex; flex-direction:column; gap:.5rem;}
+.bar-row{display:grid; grid-template-columns:1fr 2fr auto; align-items:center; gap:.6rem;}
+.bar-label{font-size:.85rem;}
+.bar-track{background:var(--line); border-radius:999px; height:10px; overflow:hidden;}
+.bar-fill{height:100%; border-radius:999px; transition:width .5s ease;}
+.bar-gold{background:var(--gold);}
+.bar-clay{background:var(--clay);}
+.bar-count{font-size:.8rem; color:var(--ink-soft); text-align:right; min-width:1.6em;}
+@media (prefers-reduced-motion:reduce){ .bar-fill{transition:none;} }
+
+.result-view{padding-bottom:2rem;}
+.voice-cards{display:flex; flex-direction:column; gap:.6rem;}
+.voice-card-sm{background:var(--paper-raised); border:1px solid var(--line); border-radius:12px; padding:.75rem 1rem; font-size:.88rem; font-style:italic;}
+.submitted-box{margin-top:1.5rem; padding:1rem; border:1px solid var(--line); border-radius:12px; background:var(--paper-raised);}
+
+.tbar{display:flex; align-items:center; gap:1rem; padding:1rem 1.5rem; border-bottom:1px solid var(--line); background:var(--paper-raised); flex-wrap:wrap;}
+.tbar-brand{font-family:'Noto Serif KR',serif; font-weight:700; font-size:1.1rem;}
+.tbar-sub{font-size:.75rem; color:var(--ink-soft); font-weight:400; margin-left:.4rem;}
+.tbar-actions{margin-left:auto; display:flex; align-items:center; gap:1rem;}
+.teacher-main{padding:1.25rem 1.5rem 3rem;}
+.teacher-grid{display:grid; grid-template-columns:360px 1fr; gap:1.25rem; align-items:start;}
+@media (max-width:920px){ .teacher-grid{grid-template-columns:1fr;} }
+
+.control-rail{display:flex; flex-direction:column; gap:.9rem;}
+.panel{background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:1rem 1.1rem; box-shadow:var(--shadow);}
+.panel h3{font-family:'Noto Sans KR',sans-serif; font-size:.95rem; margin:0 0 .6rem;}
+.panel summary{cursor:pointer; font-weight:700; font-size:.9rem; display:flex; align-items:center; justify-content:space-between;}
+.fb-row{border-top:1px solid var(--line); padding:.55rem 0;}
+.fb-row:first-of-type{border-top:none;}
+.fb-row summary{list-style:none;}
+.fb-row summary::-webkit-details-marker{display:none;}
+.tag{font-size:.72rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:var(--line); color:var(--ink-soft);}
+.tag-done{background:var(--accent-soft); color:var(--accent);}
+.tag-pending{background:var(--clay-soft); color:var(--clay);}
+.fb-detail{padding:.6rem .2rem .3rem; font-size:.85rem; display:flex; flex-direction:column; gap:.3rem;}
+.mini-row{display:flex; justify-content:space-between; padding:.4rem 0; border-top:1px solid var(--line); font-size:.85rem;}
+.mini-row:first-of-type{border-top:none;}
+.team-edit-row{display:grid; grid-template-columns:1.3fr 1fr auto; gap:.4rem;}
+.team-edit-block{margin-bottom:.9rem; padding-bottom:.9rem; border-bottom:1px solid var(--line);}
+.team-edit-block:last-of-type{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+.team-edit-list{margin-top:.6rem;}
+.row-actions{display:flex; gap:.5rem; margin-top:.6rem; flex-wrap:wrap;}
+.review-item{border-top:1px solid var(--line); padding:.7rem 0; font-size:.88rem;}
+.review-item:first-of-type{border-top:none;}
+
+.stage{
+  --s-bg:#0F1F1B; --s-ink:#F4F1E7; --s-soft:#B7C9C0; --s-accent:#4FD9B8; --s-gold:#E8B94E; --s-clay:#E58A63; --s-line:rgba(244,241,231,.16);
+  background:var(--s-bg); color:var(--s-ink); border-radius:20px; padding:2.5rem 2.75rem; min-height:460px; display:flex; align-items:center; box-shadow:var(--shadow);
+}
+.stage-only-wrap{min-height:100vh; position:relative;}
+.stage-fs-btn{position:fixed; top:.8rem; right:.8rem; z-index:20; opacity:.4;}
+.stage-fs-btn:hover{opacity:1;}
+.stage.stage-full{min-height:100vh; border-radius:0; box-shadow:none; padding:4vh 5vw;}
+.stage-inner{width:100%;}
+.stage .stage-eyebrow{text-transform:uppercase; letter-spacing:.12em; font-size:.85rem; color:var(--s-accent); font-weight:700; margin:0 0 .5rem;}
+.stage .stage-team{font-family:'Noto Serif KR',serif; font-size:3rem; margin:0;}
+.stage .stage-hint{color:var(--s-soft); margin-top:.6rem;}
+.stage .slide-embed{width:100%; aspect-ratio:16/9; border-radius:12px;}
+.stage .slide-open-link{display:inline-block; margin-top:.6rem; color:var(--s-accent);}
+.stage .stage-count{font-size:1.6rem; font-weight:700; margin-top:1.2rem;}
+.stage .bars .bar-track{background:var(--s-line);}
+.stage .bars .bar-label{color:var(--s-ink);}
+.stage .bars .bar-count{color:var(--s-soft);}
+.stage .bar-gold{background:var(--s-gold);}
+.stage .bar-clay{background:var(--s-clay);}
+.stage .voice-card{border-left:3px solid var(--s-accent); padding:.4rem 0 .4rem 1rem; margin:1.2rem 0 0; font-style:italic; color:var(--s-ink);}
+.stage .all-result-row{display:flex; justify-content:space-between; gap:1rem; padding:.6rem 0; border-top:1px solid var(--s-line); font-size:1.05rem;}
+.stage .all-result-row:first-of-type{border-top:none;}
+.stage .all-result-team{font-weight:700; color:var(--s-accent); min-width:3.5em;}
+.stage .stage-empty{color:var(--s-soft);}
+
+/* 전자칠판/프로젝터 전용 화면(stage-full)은 멀리서도 보이도록 글자를 훨씬 크게 */
+.stage.stage-full .stage-eyebrow{font-size:1.7rem;}
+.stage.stage-full .stage-team{font-size:5.2rem;}
+.stage.stage-full .stage-hint{font-size:1.5rem;}
+.stage.stage-full .stage-count{font-size:3.2rem;}
+.stage.stage-full .bars{gap:1rem;}
+.stage.stage-full .bars .bar-row{gap:1rem;}
+.stage.stage-full .bars .bar-label{font-size:1.6rem;}
+.stage.stage-full .bars .bar-count{font-size:1.4rem;}
+.stage.stage-full .bars .bar-track{height:22px;}
+.stage.stage-full .voice-card{font-size:1.4rem;}
+.stage.stage-full .all-result-row{font-size:1.7rem; padding:.9rem 0;}
+.stage.stage-full .stage-empty{font-size:1.4rem;}
+</style>
+
+<div id="app"></div>
+
+<script>
+var STRENGTHS = [];
+var IMPROVEMENTS = [];
+var APP_NAME = <?!= JSON.stringify(appName) ?>;
+var APP_SUBTITLE = <?!= JSON.stringify(appSubtitle) ?>;
+var INITIAL_ROLE = <?!= JSON.stringify(initialRole) ?>;
+var INITIAL_VIEW = <?!= JSON.stringify(initialView) ?>;
+var REFLECTION_AREAS = ['문제를 바라보는 방식','자료를 찾고 활용하는 방식','문제의 원인 분석','해결 방안','해결 방안의 실현 가능성','발표/매체','다른 관점','특별히 없음'];
+
+/* ---------- 전역 상태 ---------- */
+var state = null, feedbackDocs = [], reflectionDocs = [], spreadsheetUrl = '', webAppUrl = '';
+if (INITIAL_ROLE) { try { localStorage.setItem('rs_role', INITIAL_ROLE); } catch (e) {} }
+var myRole = INITIAL_ROLE || localStorage.getItem('rs_role');
+var myTeam = loadLocal('rs_team', null);
+var teacherAuthed = sessionStorage.getItem('rs_teacher_ok') === '1';
+var pendingTeamId = null, authError = '';
+var chipWarnMsg = '';
+var drafts = {
+  feedback: {forKey: null, strengths: [], improvements: [], comment: ''},
+  reflection: {forKey: null, area: '', reason: ''},
+  teamCode: '', pin: '', newPin: '', draftTeams: null,
+  appName: null, appSubtitle: null,
+  draftStrengths: null, draftImprovements: null,
+  mySlideUrl: null
+};
+var openPanels = {review: true};
+function panelOpenAttr(key) { return openPanels[key] ? ' open' : ''; }
+
+/* 발표자료 iframe은 브라우저 특성상 DOM에서 떼었다 붙이면 새로고침되므로,
+   화면 재구성과 별개로 body에 상주시키고 위치만 매번 맞춰준다. */
+var slideFrame = document.createElement('iframe');
+slideFrame.id = 'persistentSlideFrame';
+slideFrame.setAttribute('allowfullscreen', '');
+slideFrame.style.cssText = 'position:absolute; display:none; border:1px solid rgba(244,241,231,.16); border-radius:12px; background:#0F1F1B; z-index:5;';
+document.body.appendChild(slideFrame);
+var slideFrameKey = null;
+function repositionSlideFrame() {
+  var slot = document.querySelector('.slide-embed');
+  if (!slot) { slideFrame.style.display = 'none'; return; }
+  var rect = slot.getBoundingClientRect();
+  slideFrame.style.top = (rect.top + window.scrollY) + 'px';
+  slideFrame.style.left = (rect.left + window.scrollX) + 'px';
+  slideFrame.style.width = rect.width + 'px';
+  slideFrame.style.height = rect.height + 'px';
+  slideFrame.style.display = 'block';
+  var key = slot.getAttribute('data-slide-key');
+  if (key !== slideFrameKey) {
+    slideFrame.src = slot.getAttribute('data-slide-src');
+    slideFrameKey = key;
+  }
+}
+window.addEventListener('resize', repositionSlideFrame);
+window.addEventListener('scroll', repositionSlideFrame, true);
+function panelToggleAttr(key) { return ' ontoggle="openPanels[\'' + key + '\']=this.open"'; }
+
+function loadLocal(key, fallback) {
+  try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+}
+function saveLocal(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function containsBadWordClient(text) {
+  var bad = ['씨발','시발','병신','개새끼','좆같','지랄','미친놈','미친년'];
+  return bad.some(function (w) { return text.indexOf(w) > -1; });
+}
+function labelOf(catalog, id) { var it = catalog.filter(function(o){return o.id===id;})[0]; return it ? it.label : id; }
+function teamName(id) {
+  var t = ((state && state.teams) || []).filter(function(t){return t.id===id;})[0];
+  return t ? t.name : '(삭제된 팀)';
+}
+function teamOf(id) {
+  return ((state && state.teams) || []).filter(function(t){return t.id===id;})[0] || null;
+}
+function teamsWithFeedback() {
+  return (state.teams || []).filter(function(t){ return feedbackDocs.some(function(d){ return d.toTeamId===t.id; }); });
+}
+function normalizeSlideUrl(url) {
+  url = (url || '').trim();
+  if (!url) return '';
+  var m = url.match(/^https:\/\/docs\.google\.com\/presentation\/d\/([^/]+)/);
+  if (m) return 'https://docs.google.com/presentation/d/' + m[1] + '/embed?start=false&loop=false&delayms=3000';
+  m = url.match(/^https:\/\/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+  return url;
+}
+function tally(docs, teamId, field, catalog) {
+  var counts = {};
+  docs.filter(function(d){return d.toTeamId===teamId;}).forEach(function(d){
+    (d[field] || []).forEach(function(id){ counts[id] = (counts[id] || 0) + 1; });
+  });
+  return Object.keys(counts).map(function(id){ return {id:id, label:labelOf(catalog,id), count:counts[id]}; })
+    .sort(function(a,b){ return b.count - a.count; });
+}
+function participantCount(teamId) {
+  var seen = {};
+  feedbackDocs.filter(function(d){return d.toTeamId===teamId;}).forEach(function(d){ seen[d.fromTeamId]=1; });
+  return Object.keys(seen).length;
+}
+function barsHtml(tallyArr, colorClass) {
+  if (!tallyArr.length) return '<p class="stage-empty">아직 응답이 없어요.</p>';
+  var max = tallyArr[0].count || 1;
+  return tallyArr.map(function(t){
+    var w = Math.max(6, Math.round(t.count / max * 100));
+    return '<div class="bar-row"><span class="bar-label">' + esc(t.label) + '</span>' +
+      '<div class="bar-track"><div class="bar-fill ' + colorClass + '" style="width:' + w + '%"></div></div>' +
+      '<span class="bar-count">' + t.count + '</span></div>';
+  }).join('');
+}
+
+/* ---------- 서버 폴링 ---------- */
+function pollSnapshot() {
+  google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot();
+}
+function onSnapshot(snap) {
+  state = snap.state; feedbackDocs = snap.feedback; reflectionDocs = snap.reflections;
+  spreadsheetUrl = snap.spreadsheetUrl; webAppUrl = snap.webAppUrl;
+  if (state.strengths) STRENGTHS = state.strengths;
+  if (state.improvements) IMPROVEMENTS = state.improvements;
+  if (state.appName) APP_NAME = state.appName;
+  if (state.appSubtitle != null) APP_SUBTITLE = state.appSubtitle;
+  var active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+  render();
+}
+
+/* ---------- 렌더 ---------- */
+function render() {
+  var app = document.getElementById('app');
+  var html;
+  if (INITIAL_VIEW === 'stage') html = screenStageOnly();
+  else if (!myRole) html = screenLanding();
+  else if (myRole === 'student') html = screenStudent();
+  else html = teacherAuthed ? screenTeacherDashboard() : screenTeacherPin();
+  app.innerHTML = html;
+  repositionSlideFrame();
+}
+
+window.chooseRole = function (role) { myRole = role; localStorage.setItem('rs_role', role); render(); };
+window.switchRole = function () {
+  localStorage.removeItem('rs_role'); localStorage.removeItem('rs_team');
+  sessionStorage.removeItem('rs_teacher_ok');
+  myRole = null; myTeam = null; teacherAuthed = false; pendingTeamId = null;
+  render();
+};
+window.switchTeam = function () { localStorage.removeItem('rs_team'); myTeam = null; pendingTeamId = null; render(); };
+
+function screenLanding() {
+  return '<div class="landing"><div class="landing-card">' +
+    (APP_SUBTITLE ? '<p class="wordmark-eyebrow">' + esc(APP_SUBTITLE) + '</p>' : '') +
+    '<h1 class="wordmark">' + esc(APP_NAME) + '</h1>' +
+    '<div class="landing-actions">' +
+      '<button class="btn btn-primary btn-block" onclick="chooseRole(\'student\')">학생으로 입장</button>' +
+      '<button class="btn btn-ghost btn-block" onclick="chooseRole(\'teacher\')">교사 모드로 입장</button>' +
+    '</div></div></div>';
+}
+
+/* ---------- 학생 화면 ---------- */
+function screenStudent() {
+  if (!myTeam) return studentTeamAuth();
+  return studentShell(studentBody());
+}
+function studentTeamAuth() {
+  if (!state || !state.teams || !state.teams.length) {
+    return '<div class="landing"><div class="landing-card"><h1 class="wordmark-sm">' + esc(APP_NAME) + '</h1>' +
+      '<p class="muted">수업이 아직 준비되지 않았어요.<br>선생님이 화면을 켤 때까지 기다려주세요.</p></div></div>';
+  }
+  if (!pendingTeamId) {
+    return '<div class="landing"><div class="landing-card">' +
+      (APP_SUBTITLE ? '<p class="wordmark-eyebrow">' + esc(APP_SUBTITLE) + '</p>' : '') +
+      '<h1 class="wordmark-sm">우리 팀을 선택하세요</h1>' +
+      '<div class="team-grid">' + state.teams.map(function(t){
+        return '<button class="btn-team" onclick="selectPendingTeam(\'' + t.id + '\')">' + esc(t.name) + '</button>';
+      }).join('') + '</div></div></div>';
+  }
+  var team = state.teams.filter(function(t){return t.id===pendingTeamId;})[0];
+  return '<div class="landing"><div class="landing-card">' +
+    '<h1 class="wordmark-sm">' + esc(team.name) + ' 입장</h1>' +
+    '<p class="muted">선생님이 알려준 입장 코드를 입력하세요.</p>' +
+    '<input class="input input-lg mono" maxlength="8" placeholder="입장 코드" value="' + esc(drafts.teamCode) + '" oninput="drafts.teamCode=this.value" autocomplete="off">' +
+    '<div class="form-error">' + esc(authError) + '</div>' +
+    '<div class="landing-actions">' +
+      '<button class="btn btn-primary btn-block" onclick="submitTeamAuth()">입장</button>' +
+      '<a href="#" class="link-sm" onclick="backToTeamGrid();return false;">다른 팀 선택</a>' +
+    '</div></div></div>';
+}
+window.selectPendingTeam = function (id) { pendingTeamId = id; authError = ''; render(); };
+window.backToTeamGrid = function () { pendingTeamId = null; render(); };
+window.submitTeamAuth = function () {
+  var val = (drafts.teamCode || '').trim().toUpperCase();
+  var team = state.teams.filter(function(t){return t.id===pendingTeamId;})[0];
+  if (val && team && val === (team.code || '').toUpperCase()) {
+    myTeam = {id: team.id, name: team.name};
+    saveLocal('rs_team', myTeam);
+    pendingTeamId = null; authError = ''; drafts.teamCode = '';
+    render();
+  } else {
+    authError = '코드가 올바르지 않아요. 다시 확인해주세요.';
+    render();
+  }
+};
+function studentShell(bodyHtml) {
+  return '<header class="sbar"><span class="sbar-brand">' + esc(APP_NAME) + '</span>' +
+    '<span class="sbar-team">' + esc(myTeam.name) + '</span>' +
+    '<a href="#" class="link-sm" onclick="switchTeam();return false;">팀 전환</a></header>' +
+    '<main class="student-main">' + studentSlidePanel() + bodyHtml + '</main>';
+}
+function studentSlidePanel() {
+  var team = teamOf(myTeam.id);
+  var current = team ? (team.slideUrl || '') : '';
+  var val = drafts.mySlideUrl != null ? drafts.mySlideUrl : current;
+  return '<details class="panel" style="margin-bottom:1rem"' + panelOpenAttr('mySlide') + panelToggleAttr('mySlide') + '><summary>우리 팀 발표자료 링크' +
+    (current ? ' <span class="tag tag-done">등록됨</span>' : ' <span class="tag tag-pending">미등록</span>') + '</summary>' +
+    '<p class="muted small">완성한 발표자료(구글 슬라이드, 패들렛, 드라이브 등) 링크를 붙여넣으면 우리 팀 발표 시작할 때 선생님 화면에 자동으로 뜹니다.</p>' +
+    '<input class="input" value="' + esc(val) + '" oninput="drafts.mySlideUrl=this.value" placeholder="https://...">' +
+    '<div class="row-actions" style="margin-top:.6rem"><button class="btn btn-primary btn-sm" onclick="saveMySlideUrl()">저장</button></div></details>';
+}
+window.saveMySlideUrl = function () {
+  var url = (drafts.mySlideUrl != null ? drafts.mySlideUrl : '').trim();
+  google.script.run.withSuccessHandler(function(){ drafts.mySlideUrl = null; pollSnapshot(); })
+    .withFailureHandler(alertErr).setTeamSlideUrl({teamId: myTeam.id, slideUrl: url});
+};
+function studentBody() {
+  if (!state) return '<div class="center-msg">수업이 아직 준비되지 않았어요. 선생님을 기다려주세요.</div>';
+  if (state.phase === 'PRESENTATION') return studentPresentation();
+  if (state.phase === 'FEEDBACK') return studentFeedback();
+  if (state.phase === 'RESULT') return studentResult();
+  if (state.phase === 'ALL_RESULT') return studentAllResult();
+  if (state.phase === 'REFLECTION') return studentReflection();
+  return '<div class="center-msg">잠시만 기다려주세요.</div>';
+}
+function studentPresentation() {
+  if (!state.currentTeamId) return '<div class="center-msg"><p class="eyebrow">잠시만요</p><h2>발표팀을 기다리는 중이에요</h2></div>';
+  return '<div class="center-msg"><p class="eyebrow">현재 발표팀</p><h2>' + esc(teamName(state.currentTeamId)) + '</h2><p class="muted">발표를 잘 들어주세요</p></div>';
+}
+function studentFeedback() {
+  var toId = state.currentTeamId;
+  if (!toId) return '<div class="center-msg">발표팀을 기다리는 중이에요.</div>';
+  if (toId === myTeam.id) {
+    return '<div class="center-msg"><p class="eyebrow">우리 팀 발표</p><h2>자기 팀에는 피드백을 보낼 수 없어요</h2><p class="muted">친구들의 의견을 잠시 기다려주세요.</p></div>';
+  }
+  var forKey = state.sessionId + '::' + toId;
+  var existing = feedbackDocs.filter(function(d){return d.fromTeamId===myTeam.id && d.toTeamId===toId;})[0];
+  if (drafts.feedback.forKey !== forKey) {
+    drafts.feedback = {
+      forKey: forKey,
+      strengths: existing ? existing.strengths.slice() : [],
+      improvements: existing ? existing.improvements.slice() : [],
+      comment: existing ? existing.comment : ''
+    };
+  }
+  var d = drafts.feedback;
+  return '<div class="fb-form">' +
+    '<p class="eyebrow">' + esc(teamName(toId)) + '에게 보낼 피드백</p>' +
+    (existing ? '<p class="submitted-tag">제출 완료 · 아래에서 수정할 수 있어요</p>' : '') +
+    '<h3 class="q">이 팀의 탐구에서 가장 인상 깊었던 점은? <span class="hint">(1~2개)</span></h3>' +
+    '<div class="chip-group">' + STRENGTHS.map(function(o){
+      return '<button type="button" class="chip ' + (d.strengths.indexOf(o.id)>-1?'chip-on chip-gold':'') + '" onclick="toggleFbOption(\'strengths\',\'' + o.id + '\')">' + esc(o.label) + '</button>';
+    }).join('') + '</div>' +
+    '<h3 class="q">한 단계 더 깊어지려면? <span class="hint">(1~2개)</span></h3>' +
+    '<div class="chip-group">' + IMPROVEMENTS.map(function(o){
+      return '<button type="button" class="chip ' + (d.improvements.indexOf(o.id)>-1?'chip-on chip-clay':'') + '" onclick="toggleFbOption(\'improvements\',\'' + o.id + '\')">' + esc(o.label) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="chip-warn">' + esc(chipWarnMsg) + '</div>' +
+    '<h3 class="q">궁금한 점이나 제안하고 싶은 점을 한 문장으로</h3>' +
+    '<textarea id="fbComment" class="textarea" maxlength="150" placeholder="예) 대안의 실현 가능성이 궁금했어요." oninput="onFbCommentInput(this)">' + esc(d.comment) + '</textarea>' +
+    '<div class="counter" id="fbCounter">' + d.comment.length + ' / 150자 (최소 5자)</div>' +
+    '<div class="form-error" id="fbError"></div>' +
+    '<button class="btn btn-primary btn-block" onclick="submitFeedback(\'' + toId + '\')">제출하기</button>' +
+    '</div>';
+}
+window.toggleFbOption = function (group, id) {
+  var arr = drafts.feedback[group];
+  var idx = arr.indexOf(id);
+  if (idx >= 0) { arr.splice(idx, 1); chipWarnMsg = ''; }
+  else if (arr.length >= 2) { chipWarnMsg = '최대 2개까지 선택할 수 있어요.'; render(); return; }
+  else { arr.push(id); chipWarnMsg = ''; }
+  render();
+};
+window.onFbCommentInput = function (el) {
+  drafts.feedback.comment = el.value;
+  var c = document.getElementById('fbCounter');
+  if (c) c.textContent = el.value.length + ' / 150자 (최소 5자)';
+};
+function setFbError(msg) { var el = document.getElementById('fbError'); if (el) el.textContent = msg; }
+window.submitFeedback = function (toTeamId) {
+  var d = drafts.feedback;
+  if (d.strengths.length < 1) return setFbError('강점을 1개 이상 선택해주세요.');
+  if (d.improvements.length < 1) return setFbError('개선점을 1개 이상 선택해주세요.');
+  var comment = (d.comment || '').trim();
+  if (comment.length < 5) return setFbError('의견을 5자 이상 적어주세요.');
+  if (comment.length > 150) return setFbError('의견은 150자 이내로 적어주세요.');
+  if (containsBadWordClient(comment)) return setFbError('바르고 고운 말로 다시 적어주세요.');
+  setFbError('제출 중...');
+  google.script.run
+    .withSuccessHandler(function(){ setFbError(''); pollSnapshot(); })
+    .withFailureHandler(function(err){ setFbError(err && err.message ? err.message : '제출에 실패했어요. 다시 시도해주세요.'); })
+    .submitFeedback({fromTeamId: myTeam.id, toTeamId: toTeamId, strengths: d.strengths, improvements: d.improvements, comment: comment});
+};
+function studentResult() {
+  var id = state.currentTeamId;
+  var st = tally(feedbackDocs, id, 'strengths', STRENGTHS).slice(0, 5);
+  var im = tally(feedbackDocs, id, 'improvements', IMPROVEMENTS).slice(0, 5);
+  return '<div class="result-view"><p class="eyebrow">' + esc(teamName(id)) + ' 발표 결과</p>' +
+    '<h3 class="q">강점</h3><div class="bars">' + barsHtml(st, 'bar-gold') + '</div>' +
+    '<h3 class="q">개선점</h3><div class="bars">' + barsHtml(im, 'bar-clay') + '</div></div>';
+}
+function studentAllResult() {
+  var rows = teamsWithFeedback().map(function(t){
+    var top = tally(feedbackDocs, t.id, 'strengths', STRENGTHS)[0];
+    return '<div class="mini-row"><b>' + esc(t.name) + '</b><span>' + (top?esc(top.label):'응답 없음') + '</span></div>';
+  }).join('');
+  return '<div class="result-view"><p class="eyebrow">오늘 우리가 발견한 탐구들</p>' + rows + '</div>';
+}
+function studentReflection() {
+  var rfKey = state.sessionId + '::' + myTeam.id;
+  if (drafts.reflection.forKey !== rfKey) drafts.reflection = {forKey: rfKey, area: '', reason: ''};
+  var mine = reflectionDocs.filter(function(r){return r.teamId===myTeam.id;})[0];
+  var st = tally(feedbackDocs, myTeam.id, 'strengths', STRENGTHS);
+  var im = tally(feedbackDocs, myTeam.id, 'improvements', IMPROVEMENTS);
+  var comments = feedbackDocs.filter(function(d){return d.toTeamId===myTeam.id && d.approved===true && d.comment;});
+  var header = '<p class="eyebrow">우리 팀이 받은 피드백</p>' +
+    '<h3 class="q">강점</h3><div class="bars">' + barsHtml(st.slice(0,5), 'bar-gold') + '</div>' +
+    '<h3 class="q">개선점</h3><div class="bars">' + barsHtml(im.slice(0,5), 'bar-clay') + '</div>' +
+    (comments.length ? '<h3 class="q">친구들의 한마디</h3><div class="voice-cards">' + comments.map(function(c){
+      return '<div class="voice-card-sm">"' + esc(c.comment) + '"</div>';
+    }).join('') + '</div>' : '');
+  if (mine) {
+    return '<div class="result-view">' + header + '<div class="submitted-box"><p class="submitted-tag">성찰 제출 완료</p>' +
+      '<p><b>' + esc(mine.selectedArea) + '</b></p><p class="muted">' + esc(mine.reason) + '</p></div></div>';
+  }
+  var d = drafts.reflection;
+  return '<div class="result-view">' + header +
+    '<h3 class="q">다시 생각해 보고 싶은 것은?</h3>' +
+    '<div class="chip-group">' + REFLECTION_AREAS.map(function(a){
+      return '<button type="button" class="chip ' + (d.area===a?'chip-on':'') + '" onclick="pickReflectionArea(\'' + esc(a) + '\')">' + esc(a) + '</button>';
+    }).join('') + '</div>' +
+    '<h3 class="q">왜 그렇게 생각했나요?</h3>' +
+    '<textarea id="refReason" class="textarea" maxlength="300" placeholder="1~3문장 정도로 적어주세요." oninput="onRefReasonInput(this)">' + esc(d.reason) + '</textarea>' +
+    '<div class="form-error" id="refError"></div>' +
+    '<button class="btn btn-primary btn-block" onclick="submitReflection()">제출</button></div>';
+}
+window.pickReflectionArea = function (a) { drafts.reflection.area = a; render(); };
+window.onRefReasonInput = function (el) { drafts.reflection.reason = el.value; };
+function setRefError(msg) { var el = document.getElementById('refError'); if (el) el.textContent = msg; }
+window.submitReflection = function () {
+  var d = drafts.reflection;
+  if (!d.area) return setRefError('되돌아볼 영역을 선택해주세요.');
+  var reason = (d.reason || '').trim();
+  if (reason.length < 5) return setRefError('이유를 조금 더 자세히 적어주세요.');
+  if (containsBadWordClient(reason)) return setRefError('바르고 고운 말로 다시 적어주세요.');
+  setRefError('제출 중...');
+  google.script.run
+    .withSuccessHandler(function(){ setRefError(''); pollSnapshot(); })
+    .withFailureHandler(function(err){ setRefError(err && err.message ? err.message : '제출에 실패했어요.'); })
+    .submitReflection({teamId: myTeam.id, selectedArea: d.area, reason: reason});
+};
+
+/* ---------- 교사 화면 ---------- */
+function screenTeacherPin() {
+  return '<div class="landing"><div class="landing-card">' +
+    '<p class="wordmark-eyebrow">교사 모드</p><h1 class="wordmark-sm">PIN을 입력하세요</h1>' +
+    (!state ? '<p class="muted">처음 시작하시나요? 기본 PIN은 <b>0000</b>이에요.</p>' : '') +
+    '<input class="input input-lg mono" maxlength="8" placeholder="PIN" value="' + esc(drafts.pin) + '" oninput="drafts.pin=this.value" onkeydown="if(event.key===\'Enter\')submitTeacherPin()">' +
+    '<div class="form-error" id="pinError"></div>' +
+    '<div class="landing-actions">' +
+      '<button class="btn btn-primary btn-block" onclick="submitTeacherPin()">입장</button>' +
+      '<a href="#" class="link-sm" onclick="switchRole();return false;">학생 화면으로</a>' +
+    '</div></div></div>';
+}
+function setPinError(msg) { var el = document.getElementById('pinError'); if (el) el.textContent = msg; }
+window.submitTeacherPin = function () {
+  var val = (drafts.pin || '').trim();
+  google.script.run.withSuccessHandler(function(res){
+    if (res.ok) { teacherAuthed = true; sessionStorage.setItem('rs_teacher_ok', '1'); drafts.pin = ''; pollSnapshot(); }
+    else setPinError(res.message || 'PIN이 올바르지 않아요.');
+  }).withFailureHandler(function(){ setPinError('오류가 발생했어요.'); }).teacherLogin(val);
+};
+
+function screenTeacherDashboard() {
+  if (!state) return teacherShell('<p class="muted">수업 데이터를 불러오는 중이에요...</p>');
+  return teacherShell('<div class="teacher-grid"><aside class="control-rail">' + teacherControlRail() + '</aside>' +
+    '<section class="stage">' + teacherStage() + '</section></div>');
+}
+function teacherShell(body) {
+  return '<header class="tbar"><div class="tbar-brand">' + esc(APP_NAME) +
+    (APP_SUBTITLE ? ' <span class="tbar-tagline">' + esc(APP_SUBTITLE) + '</span>' : '') +
+    ' <span class="tbar-sub">· 교사 모드</span></div>' +
+    '<div class="tbar-actions"><button class="btn btn-ghost btn-sm" onclick="newSession()">새 수업 시작</button>' +
+    '<a href="#" class="link-sm" onclick="switchRole();return false;">역할 전환</a></div></header>' +
+    '<main class="teacher-main">' + body + '</main>';
+}
+window.newSession = function () {
+  if (!confirm('이전 피드백 데이터를 이번 세션에서 분리하고 새로운 수업을 시작할까요? 기존 데이터는 삭제되지 않고 시트에 그대로 남아요.')) return;
+  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).newSession();
+};
+function onStateUpdated(newState) {
+  state = newState;
+  if (state.strengths) STRENGTHS = state.strengths;
+  if (state.improvements) IMPROVEMENTS = state.improvements;
+  if (state.appName) APP_NAME = state.appName;
+  if (state.appSubtitle != null) APP_SUBTITLE = state.appSubtitle;
+  pollSnapshot();
+  render();
+}
+function alertErr(err) { alert(err && err.message ? err.message : '오류가 발생했어요.'); }
+
+var PHASE_LABELS = {PRESENTATION:'발표', FEEDBACK:'피드백', RESULT:'결과 공개', ALL_RESULT:'전체 결과', REFLECTION:'성찰'};
+var TEAM_PHASES = ['PRESENTATION', 'FEEDBACK', 'RESULT'];
+function teacherControlRail() {
+  var stageLink = webAppUrl ? '<a class="link-sm" href="' + esc(webAppUrl) + '?view=stage" target="_blank" rel="noopener">프로젝터 전용 화면 새 창에서 열기 →</a>' : '';
+  return '<div class="panel">' + phaseSwitcher() + '</div>' +
+    '<p class="muted small" style="margin:.5rem 0 0">전자칠판/프로젝터는 이 창을 복제하지 말고, 화면 확장 후 아래 링크로 연 창을 그쪽으로 옮겨서 쓰세요.</p>' +
+    '<p style="margin:.3rem 0 0">' + stageLink + '</p>' +
+    phaseControls() + teamManagementPanel() + optionCatalogPanel() + appSettingsPanel() +
+    commentReviewPanel() + feedbackLogPanel() +
+    reflectionStatusPanel() + sheetLinkPanel() + pinPanel();
+}
+function phaseSwitcher() {
+  var teamChips = state.teams.map(function(t){
+    return '<button class="chip ' + (state.currentTeamId===t.id?'chip-on':'') + '" onclick="pickCurrentTeam(\'' + t.id + '\')">' + esc(t.name) + '</button>';
+  }).join('');
+  var phaseChips = TEAM_PHASES.map(function(p){
+    return '<button class="chip ' + (state.phase===p?'chip-on':'') + '"' + (!state.currentTeamId?' disabled':'') + ' onclick="setPhase(\'' + p + '\')">' + PHASE_LABELS[p] + '</button>';
+  }).join('');
+  return '<h3>발표팀</h3><div class="chip-group">' + teamChips + '</div>' +
+    '<h3 style="margin-top:1rem">' + (state.currentTeamId ? esc(teamName(state.currentTeamId)) + '의 단계' : '팀을 먼저 선택하세요') + '</h3>' +
+    '<div class="chip-group">' + phaseChips + '</div>' +
+    '<div class="row-actions" style="margin-top:.8rem">' +
+      '<button class="btn btn-sm ' + (state.phase==='ALL_RESULT'?'btn-primary':'btn-ghost') + '" onclick="setPhase(\'ALL_RESULT\')">전체 결과</button>' +
+      '<button class="btn btn-sm ' + (state.phase==='REFLECTION'?'btn-primary':'btn-ghost') + '" onclick="setPhase(\'REFLECTION\')">성찰</button>' +
+    '</div>' +
+    '<p class="muted small" style="margin-top:.6rem">팀과 단계를 순서와 상관없이 자유롭게 오갈 수 있어요.</p>';
+}
+window.pickCurrentTeam = function (id) {
+  var patch = {currentTeamId: id};
+  if (state.phase === 'ALL_RESULT' || state.phase === 'REFLECTION') patch.phase = 'PRESENTATION';
+  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState(patch);
+};
+window.setPhase = function (p) { google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState({phase: p}); };
+function phaseControls() {
+  if (state.phase === 'FEEDBACK' && state.currentTeamId) return feedbackChecklist(state.currentTeamId);
+  return '';
+}
+function feedbackChecklist(currentTeamId) {
+  var others = state.teams.filter(function(t){return t.id!==currentTeamId;});
+  var doneCount = 0;
+  var rows = others.map(function(t){
+    var doc = feedbackDocs.filter(function(d){return d.fromTeamId===t.id && d.toTeamId===currentTeamId;})[0];
+    if (doc) doneCount++;
+    return '<details class="fb-row"><summary><span>' + esc(t.name) + '</span>' +
+      '<span class="tag ' + (doc?'tag-done':'tag-pending') + '">' + (doc?'제출 완료':'미제출') + '</span></summary>' +
+      (doc ? feedbackDetailHtml(doc) : '<p class="muted">아직 제출하지 않았어요.</p>') + '</details>';
+  }).join('');
+  return '<div class="panel"><h3>피드백 제출 현황 <span class="mono">' + doneCount + ' / ' + others.length + '</span></h3>' + rows + '</div>';
+}
+function feedbackDetailHtml(d) {
+  return '<div class="fb-detail">' +
+    '<p><b>강점</b> ' + (d.strengths.map(function(id){return esc(labelOf(STRENGTHS,id));}).join(', ') || '-') + '</p>' +
+    '<p><b>개선점</b> ' + (d.improvements.map(function(id){return esc(labelOf(IMPROVEMENTS,id));}).join(', ') || '-') + '</p>' +
+    '<p><b>의견</b> "' + esc(d.comment || '') + '"</p>' +
+    '<p class="muted small">' + esc(new Date(d.submittedAt).toLocaleTimeString('ko-KR')) + '</p></div>';
+}
+function feedbackLogPanel() {
+  if (!feedbackDocs.length) return '<details class="panel"' + panelOpenAttr('log') + panelToggleAttr('log') + '><summary>피드백 전체 기록</summary><p class="muted">아직 기록이 없어요.</p></details>';
+  var sorted = feedbackDocs.slice().sort(function(a,b){ return a.submittedAt < b.submittedAt ? 1 : -1; });
+  var rows = sorted.map(function(d){
+    var tagText = d.approved===true ? '의견 공개' : (d.approved===false ? '의견 비공개' : '검토 대기');
+    var tagClass = d.approved===true ? 'tag-done' : (d.approved===false ? 'tag-pending' : '');
+    return '<details class="fb-row"><summary><span>' + esc(teamName(d.fromTeamId)) + ' → ' + esc(teamName(d.toTeamId)) + '</span>' +
+      '<span class="tag ' + tagClass + '">' + tagText + '</span></summary>' + feedbackDetailHtml(d) + '</details>';
+  }).join('');
+  return '<details class="panel"' + panelOpenAttr('log') + panelToggleAttr('log') + '><summary>피드백 전체 기록 <span class="mono">' + feedbackDocs.length + '건</span></summary>' + rows + '</details>';
+}
+function commentReviewPanel() {
+  var pending = feedbackDocs.filter(function(d){ return d.approved===null && d.comment && d.comment.trim(); });
+  return '<details class="panel"' + panelOpenAttr('review') + panelToggleAttr('review') + '><summary>자유 의견 검토 <span class="mono">' + pending.length + '</span></summary>' +
+    (pending.length ? pending.map(function(d){
+      return '<div class="review-item"><p class="muted small">' + esc(teamName(d.fromTeamId)) + ' → ' + esc(teamName(d.toTeamId)) + '</p>' +
+        '<p>"' + esc(d.comment) + '"</p><div class="row-actions">' +
+        '<button class="btn btn-ghost btn-sm" onclick="setApproval(\'' + d.id + '\',true)">공개</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="setApproval(\'' + d.id + '\',false)">비공개</button></div></div>';
+    }).join('') : '<p class="muted">검토할 새 의견이 없어요.</p>') + '</details>';
+}
+window.setApproval = function (id, val) { google.script.run.withSuccessHandler(pollSnapshot).withFailureHandler(alertErr).setApproval(id, val); };
+
+function reflectionStatusPanel() {
+  var rows = state.teams.map(function(t){
+    var done = reflectionDocs.some(function(r){return r.teamId===t.id;});
+    return '<div class="mini-row"><span>' + esc(t.name) + '</span><span class="tag ' + (done?'tag-done':'tag-pending') + '">' + (done?'제출 완료':'미제출') + '</span></div>';
+  }).join('');
+  return '<details class="panel"' + panelOpenAttr('reflectionStatus') + panelToggleAttr('reflectionStatus') + '><summary>팀별 성찰 제출 현황 <span class="mono">' + reflectionDocs.length + ' / ' + state.teams.length + '</span></summary>' + rows + '</details>';
+}
+function sheetLinkPanel() {
+  return '<div class="panel"><h3>수업 데이터</h3><p class="muted small">모든 피드백과 성찰 원본은 연결된 구글 시트에 자동으로 쌓여요. 시트에서 조회하거나 파일 &gt; 다운로드 &gt; CSV로 내보낼 수 있어요.</p>' +
+    (spreadsheetUrl ? '<a class="btn btn-ghost btn-block" href="' + esc(spreadsheetUrl) + '" target="_blank" rel="noopener">구글 시트 열기</a>' : '') + '</div>';
+}
+function teamManagementPanel() {
+  var list = drafts.draftTeams || state.teams;
+  var rows = list.map(function(t, i){
+    return '<div class="team-edit-block">' +
+      '<div class="team-edit-row">' +
+      '<input class="input" style="margin-top:0" value="' + esc(t.name) + '" oninput="onDraftTeamField(' + i + ',\'name\',this.value)" placeholder="팀 이름">' +
+      '<input class="input mono" style="margin-top:0" value="' + esc(t.code) + '" oninput="onDraftTeamField(' + i + ',\'code\',this.value)" placeholder="입장 코드">' +
+      '<button class="btn btn-ghost btn-sm" onclick="removeDraftTeam(' + i + ')">삭제</button></div>' +
+      '<input class="input" style="margin-top:.4rem" value="' + esc(t.slideUrl || '') + '" oninput="onDraftTeamField(' + i + ',\'slideUrl\',this.value)" placeholder="발표자료 링크 (구글 슬라이드/드라이브/PDF 등, 선택)">' +
+      '</div>';
+  }).join('');
+  return '<details class="panel"' + panelOpenAttr('teams') + ' ontoggle="onTeamsToggle(this)"><summary>팀 관리</summary>' +
+    '<p class="muted small">발표자료 링크를 넣어두면 그 팀의 발표를 시작할 때 무대 화면에 자동으로 표시돼요. 구글 슬라이드는 보통 편집 화면 링크를 그대로 붙여넣어도 자동으로 삽입용으로 바뀌어요.</p>' +
+    '<div class="team-edit-list">' + rows + '</div>' +
+    '<div class="row-actions"><button class="btn btn-ghost btn-sm" onclick="addDraftTeam()">+ 팀 추가</button>' +
+    '<button class="btn btn-primary btn-sm" onclick="saveTeams()">저장</button></div></details>';
+}
+window.onTeamsToggle = function (el) {
+  openPanels.teams = el.open;
+  if (el.open && !drafts.draftTeams) { drafts.draftTeams = state.teams.map(function(t){return {id:t.id,name:t.name,code:t.code,slideUrl:t.slideUrl||''};}); }
+};
+window.onDraftTeamField = function (i, field, val) { drafts.draftTeams[i][field] = val; };
+window.addDraftTeam = function () {
+  drafts.draftTeams = drafts.draftTeams || state.teams.map(function(t){return {id:t.id,name:t.name,code:t.code,slideUrl:t.slideUrl||''};});
+  drafts.draftTeams.push({id: 't' + Date.now().toString(36), name: '', code: '', slideUrl: ''});
+  render();
+};
+window.removeDraftTeam = function (i) { drafts.draftTeams.splice(i, 1); render(); };
+window.saveTeams = function () {
+  google.script.run.withSuccessHandler(function(newState){ drafts.draftTeams = null; onStateUpdated(newState); })
+    .withFailureHandler(alertErr).saveTeams(drafts.draftTeams || state.teams);
+};
+function appSettingsPanel() {
+  var name = drafts.appName != null ? drafts.appName : state.appName;
+  var sub = drafts.appSubtitle != null ? drafts.appSubtitle : (state.appSubtitle || '');
+  return '<details class="panel"' + panelOpenAttr('appSettings') + panelToggleAttr('appSettings') + '><summary>앱 이름 설정</summary>' +
+    '<p class="muted small">이 배포를 다른 발표 수업에 재사용할 때 이름을 바꿔보세요.</p>' +
+    '<input class="input" value="' + esc(name) + '" oninput="drafts.appName=this.value" placeholder="앱 이름 (예: RE:SEARCH)">' +
+    '<input class="input" value="' + esc(sub) + '" oninput="drafts.appSubtitle=this.value" placeholder="부제 (생략 가능)">' +
+    '<div class="row-actions" style="margin-top:.6rem"><button class="btn btn-primary btn-sm" onclick="saveAppSettings()">저장</button></div></details>';
+}
+window.saveAppSettings = function () {
+  var name = (drafts.appName != null ? drafts.appName : state.appName).trim();
+  var sub = (drafts.appSubtitle != null ? drafts.appSubtitle : (state.appSubtitle || '')).trim();
+  if (!name) { alert('앱 이름을 입력해주세요.'); return; }
+  google.script.run.withSuccessHandler(function(newState){ drafts.appName=null; drafts.appSubtitle=null; onStateUpdated(newState); })
+    .withFailureHandler(alertErr).saveAppSettings({appName:name, appSubtitle:sub});
+};
+
+function optionCatalogPanel() {
+  var sList = drafts.draftStrengths || STRENGTHS;
+  var iList = drafts.draftImprovements || IMPROVEMENTS;
+  function rows(list, key) {
+    return list.map(function(o, i){
+      return '<div class="team-edit-row" style="grid-template-columns:1fr auto">' +
+        '<input class="input" style="margin-top:0" value="' + esc(o.label) + '" oninput="onDraftOptionField(\'' + key + '\',' + i + ',this.value)" placeholder="선택지 문구">' +
+        '<button class="btn btn-ghost btn-sm" onclick="removeDraftOption(\'' + key + '\',' + i + ')">삭제</button></div>';
+    }).join('');
+  }
+  return '<details class="panel"' + panelOpenAttr('options') + ' ontoggle="onOptionsToggle(this)"><summary>피드백 선택지 관리</summary>' +
+    '<p class="muted small">학생이 피드백을 남길 때 고르는 문구예요. 수업 주제에 맞게 자유롭게 바꿔도 됩니다.</p>' +
+    '<h3 style="margin-top:.8rem">강점</h3>' + rows(sList, 'draftStrengths') +
+    '<button class="btn btn-ghost btn-sm" style="margin-top:.4rem" onclick="addDraftOption(\'draftStrengths\')">+ 강점 추가</button>' +
+    '<h3 style="margin-top:1rem">개선점</h3>' + rows(iList, 'draftImprovements') +
+    '<button class="btn btn-ghost btn-sm" style="margin-top:.4rem" onclick="addDraftOption(\'draftImprovements\')">+ 개선점 추가</button>' +
+    '<div class="row-actions" style="margin-top:.8rem"><button class="btn btn-primary btn-sm" onclick="saveOptionCatalog()">저장</button></div></details>';
+}
+window.onOptionsToggle = function (el) {
+  openPanels.options = el.open;
+  if (el.open) {
+    if (!drafts.draftStrengths) drafts.draftStrengths = STRENGTHS.map(function(o){return {id:o.id, label:o.label};});
+    if (!drafts.draftImprovements) drafts.draftImprovements = IMPROVEMENTS.map(function(o){return {id:o.id, label:o.label};});
+  }
+};
+window.onDraftOptionField = function (key, i, val) { drafts[key][i].label = val; };
+window.addDraftOption = function (key) {
+  drafts[key] = drafts[key] || (key === 'draftStrengths' ? STRENGTHS : IMPROVEMENTS).map(function(o){return {id:o.id, label:o.label};});
+  drafts[key].push({id: (key === 'draftStrengths' ? 's' : 'i') + Date.now().toString(36), label: ''});
+  render();
+};
+window.removeDraftOption = function (key, i) { drafts[key].splice(i, 1); render(); };
+window.saveOptionCatalog = function () {
+  var s = drafts.draftStrengths || STRENGTHS;
+  var i = drafts.draftImprovements || IMPROVEMENTS;
+  google.script.run.withSuccessHandler(function(newState){ drafts.draftStrengths=null; drafts.draftImprovements=null; onStateUpdated(newState); })
+    .withFailureHandler(alertErr).saveOptionCatalog({strengths:s, improvements:i});
+};
+
+function pinPanel() {
+  return '<details class="panel"' + panelOpenAttr('pin') + panelToggleAttr('pin') + '><summary>교사 PIN 변경</summary>' +
+    '<div class="row-actions"><input class="input mono" style="margin-top:0" placeholder="새 PIN" value="' + esc(drafts.newPin) + '" oninput="drafts.newPin=this.value" maxlength="8">' +
+    '<button class="btn btn-ghost btn-sm" onclick="changePin()">변경</button></div></details>';
+}
+window.changePin = function () {
+  var v = (drafts.newPin || '').trim();
+  if (!v) { alert('새 PIN을 입력해주세요.'); return; }
+  google.script.run.withSuccessHandler(function(newState){ drafts.newPin=''; onStateUpdated(newState); alert('PIN이 변경되었어요.'); })
+    .withFailureHandler(alertErr).changePin(v);
+};
+
+function screenStageOnly() {
+  var fsBtn = '<button class="btn btn-ghost btn-sm stage-fs-btn" onclick="toggleFullscreen()">전체 화면 전환</button>';
+  if (!state) return '<div class="stage-only-wrap">' + fsBtn + '<section class="stage stage-full"><div class="stage-inner"><p class="muted">불러오는 중...</p></div></section></div>';
+  return '<div class="stage-only-wrap">' + fsBtn + '<section class="stage stage-full">' + teacherStage() + '</section></div>';
+}
+window.toggleFullscreen = function () {
+  if (document.fullscreenElement) { document.exitFullscreen(); }
+  else if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); }
+};
+function teacherStage() {
+  var body = '';
+  if (state.phase === 'PRESENTATION') {
+    var pTeam = state.currentTeamId ? teamOf(state.currentTeamId) : null;
+    if (!pTeam) {
+      body = '<p class="stage-eyebrow">잠시만요</p><h1 class="stage-team">발표팀을 선택해주세요</h1>';
+    } else if (pTeam.slideUrl) {
+      var slideSrc = normalizeSlideUrl(pTeam.slideUrl);
+      var slideKey = pTeam.id + '::' + slideSrc;
+      body = '<p class="stage-eyebrow">지금 발표하는 팀 · ' + esc(pTeam.name) + '</p>' +
+        '<div class="slide-embed" data-slide-key="' + esc(slideKey) + '" data-slide-src="' + esc(slideSrc) + '"></div>' +
+        '<a class="link-sm slide-open-link" href="' + esc(pTeam.slideUrl) + '" target="_blank" rel="noopener">화면이 안 뜨면 새 창에서 열기 →</a>';
+    } else {
+      body = '<p class="stage-eyebrow">지금 발표하는 팀</p><h1 class="stage-team">' + esc(pTeam.name) + '</h1>' +
+        '<p class="stage-hint">팀 관리에서 발표자료 링크를 등록하면 여기에 자동으로 표시돼요.</p>';
+    }
+  } else if (state.phase === 'FEEDBACK') {
+    var count = participantCount(state.currentTeamId);
+    var liveSt = tally(feedbackDocs, state.currentTeamId, 'strengths', STRENGTHS).slice(0, 5);
+    var liveIm = tally(feedbackDocs, state.currentTeamId, 'improvements', IMPROVEMENTS).slice(0, 5);
+    body = '<p class="stage-eyebrow">🔎 ' + esc(teamName(state.currentTeamId)) + ' 발표 피드백</p>' +
+      '<p class="stage-hint">발표를 듣고 의견을 보내주세요</p>' +
+      '<p class="stage-count">현재 참여 <b>' + count + '</b>명</p>' +
+      '<p class="stage-eyebrow" style="margin-top:1.4rem">실시간 강점</p>' +
+      '<div class="bars">' + barsHtml(liveSt, 'bar-gold') + '</div>' +
+      '<p class="stage-eyebrow" style="margin-top:1.2rem">실시간 개선점</p>' +
+      '<div class="bars">' + barsHtml(liveIm, 'bar-clay') + '</div>';
+  } else if (state.phase === 'RESULT') {
+    var st = tally(feedbackDocs, state.currentTeamId, 'strengths', STRENGTHS).slice(0, 5);
+    var im = tally(feedbackDocs, state.currentTeamId, 'improvements', IMPROVEMENTS).slice(0, 5);
+    var comments = feedbackDocs.filter(function(d){return d.toTeamId===state.currentTeamId && d.approved===true && d.comment;});
+    var quote = comments.length ? comments[Math.floor(Math.random()*comments.length)] : null;
+    body = '<p class="stage-eyebrow">' + esc(teamName(state.currentTeamId)) + ' 발표에서 발견한 강점</p>' +
+      '<div class="bars">' + barsHtml(st, 'bar-gold') + '</div>' +
+      '<p class="stage-eyebrow" style="margin-top:1.5rem">한 단계 더 생각한다면</p>' +
+      '<div class="bars">' + barsHtml(im, 'bar-clay') + '</div>' +
+      (quote ? '<blockquote class="voice-card">"' + esc(quote.comment) + '"</blockquote>' : '');
+  } else if (state.phase === 'ALL_RESULT') {
+    body = '<p class="stage-eyebrow">🔎 오늘 우리가 발견한 탐구들</p><div class="all-result-list">' +
+      teamsWithFeedback().map(function(t){
+        var top = tally(feedbackDocs, t.id, 'strengths', STRENGTHS)[0];
+        return '<div class="all-result-row"><span class="all-result-team">' + esc(t.name) + '</span><span>' + (top?esc(top.label):'응답 없음') + '</span></div>';
+      }).join('') + '</div>';
+  } else if (state.phase === 'REFLECTION') {
+    body = '<p class="stage-eyebrow">우리 탐구를 다시 보다</p>' +
+      '<p class="stage-hint">친구들의 피드백을 살펴보고 우리 팀의 탐구를 다시 바라보는 시간이에요</p>' +
+      '<p class="stage-count">' + reflectionDocs.length + ' / ' + state.teams.length + '팀 제출 완료</p>';
+  }
+  return '<div class="stage-inner">' + body + '</div>';
+}
+
+/* ---------- 시작 ---------- */
+pollSnapshot();
+setInterval(pollSnapshot, 3000);
+render();
+</script>
