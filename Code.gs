@@ -170,15 +170,37 @@ function containsBadWord_(text) {
   return BAD_WORDS.some(function (w) { return text.indexOf(w) > -1; });
 }
 
+/* ---------- 잠금·캐시 ---------- */
+
+// 학생 제출(시트 쓰기)은 문서 잠금, 교사 단계 변경(상태 쓰기)은 스크립트 잠금으로 분리한다.
+// 예전엔 전부 스크립트 잠금 하나라서 학생 30명이 동시에 제출하면 교사의 단계 변경이 줄 뒤에서 시간 초과로 실패했다.
+// ponytail: 문서 잠금은 반 구분 없이 하나. 여러 반 동시 진행이 잦으면 반별 시트 잠금을 검토.
+function sheetLock_() { return LockService.getDocumentLock() || LockService.getScriptLock(); }
+
+function snapCacheKey_(classId, sessionId) { return 'snap__' + classId + '__' + sessionId; }
+function clearSnapCache_(classId) {
+  try { CacheService.getScriptCache().remove(snapCacheKey_(classId, ensureState_(classId).sessionId)); } catch (e) {}
+}
+
 /* ---------- 클라이언트 호출용 함수 ---------- */
 
 function getSnapshot(classId) {
   classId = normalizeClassId_(classId);
   var state = ensureState_(classId);
+  // 모두가 3초마다 부르는 함수라 시트 읽기 결과를 4초 캐시한다(제출·승인 때는 캐시를 비운다).
+  var cache = CacheService.getScriptCache(), key = snapCacheKey_(classId, state.sessionId), rows = null;
+  try { var hit = cache.get(key); if (hit) rows = JSON.parse(hit); } catch (e) {}
+  if (!rows) {
+    rows = {
+      feedback: readSheetForSession_(feedbackSheet_(classId), FEEDBACK_HEADERS, state.sessionId),
+      reflections: readSheetForSession_(reflectionSheet_(classId), REFLECTION_HEADERS, state.sessionId)
+    };
+    try { cache.put(key, JSON.stringify(rows), 4); } catch (e) {} // 100KB 넘으면 캐시 없이 그대로 동작
+  }
   return {
     state: state,
-    feedback: readSheetForSession_(feedbackSheet_(classId), FEEDBACK_HEADERS, state.sessionId),
-    reflections: readSheetForSession_(reflectionSheet_(classId), REFLECTION_HEADERS, state.sessionId),
+    feedback: rows.feedback,
+    reflections: rows.reflections,
     spreadsheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
     webAppUrl: ScriptApp.getService().getUrl(),
     classes: listClasses()
@@ -323,40 +345,42 @@ function classUploadFolder_(classId) {
 
 function uploadTeamSlide(classId, payload) {
   classId = normalizeClassId_(classId);
+  var teamId = String(payload.teamId || '');
+  var team = null, st = ensureState_(classId);
+  for (var i = 0; i < st.teams.length; i++) { if (st.teams[i].id === teamId) { team = st.teams[i]; break; } }
+  if (!team) throw new Error('팀을 찾을 수 없어요.');
+
+  var base64 = String(payload.base64Data || '');
+  if (!base64) throw new Error('파일 내용을 읽지 못했어요.');
+  if (base64.length > MAX_UPLOAD_BASE64_LEN) throw new Error('파일이 너무 커요(20MB 이하로 올려주세요). 큰 파일은 링크 입력을 이용해주세요.');
+
+  var mimeType = String(payload.mimeType || 'application/octet-stream');
+  var filename = String(payload.filename || 'presentation').slice(0, 120);
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, filename);
+
+  // 오래 걸리는 Drive 저장은 잠금 밖에서 하고, 상태에 주소를 적는 순간만 잠근다.
+  var file = classUploadFolder_(classId).createFile(blob);
+  file.setName(team.name + '_' + filename);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
   var lock = LockService.getScriptLock();
-  lock.waitLock(15000);
+  lock.waitLock(10000);
   try {
     var state = ensureState_(classId);
-    var teamId = String(payload.teamId || '');
-    var team = null;
-    for (var i = 0; i < state.teams.length; i++) { if (state.teams[i].id === teamId) { team = state.teams[i]; break; } }
-    if (!team) throw new Error('팀을 찾을 수 없어요.');
-
-    var base64 = String(payload.base64Data || '');
-    if (!base64) throw new Error('파일 내용을 읽지 못했어요.');
-    if (base64.length > MAX_UPLOAD_BASE64_LEN) throw new Error('파일이 너무 커요(20MB 이하로 올려주세요). 큰 파일은 링크 입력을 이용해주세요.');
-
-    var mimeType = String(payload.mimeType || 'application/octet-stream');
-    var filename = String(payload.filename || 'presentation').slice(0, 120);
-    var blob = Utilities.newBlob(Utilities.base64Decode(base64), mimeType, filename);
-
-    var folder = classUploadFolder_(classId);
-    var file = folder.createFile(blob);
-    file.setName(team.name + '_' + filename);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-    team.slideUrl = 'https://drive.google.com/file/d/' + file.getId() + '/preview';
+    for (var k = 0; k < state.teams.length; k++) {
+      if (state.teams[k].id === teamId) { state.teams[k].slideUrl = 'https://drive.google.com/file/d/' + file.getId() + '/preview'; break; }
+    }
     saveState_(classId, state);
-    return {ok: true, fileUrl: file.getUrl()};
   } finally {
     lock.releaseLock();
   }
+  return {ok: true, fileUrl: file.getUrl()};
 }
 
 function setApproval(classId, id, approved) {
   classId = normalizeClassId_(classId);
-  var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  var lock = sheetLock_();
+  lock.waitLock(30000);
   try {
     var sheet = feedbackSheet_(classId);
     var values = sheet.getDataRange().getValues();
@@ -364,6 +388,7 @@ function setApproval(classId, id, approved) {
     for (var i = 1; i < values.length; i++) {
       if (values[i][0] === id) { sheet.getRange(i + 1, col).setValue(!!approved); break; }
     }
+    clearSnapCache_(classId);
     return {ok: true};
   } finally {
     lock.releaseLock();
@@ -372,8 +397,8 @@ function setApproval(classId, id, approved) {
 
 function submitFeedback(classId, payload) {
   classId = normalizeClassId_(classId);
-  var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  var lock = sheetLock_();
+  lock.waitLock(30000);
   try {
     var state = ensureState_(classId);
     var strengths = (payload.strengths || []).slice(0, 2);
@@ -402,6 +427,7 @@ function submitFeedback(classId, payload) {
     var rowData = [id, state.sessionId, fromTeamId, toTeamId, strengths.join('|'), improvements.join('|'), comment, '', new Date().toISOString(), fromStudent];
     if (rowIndex > 0) sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
     else sheet.appendRow(rowData);
+    clearSnapCache_(classId);
     return {ok: true};
   } finally {
     lock.releaseLock();
@@ -410,8 +436,8 @@ function submitFeedback(classId, payload) {
 
 function submitReflection(classId, payload) {
   classId = normalizeClassId_(classId);
-  var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  var lock = sheetLock_();
+  lock.waitLock(30000);
   try {
     var state = ensureState_(classId);
     var teamId = String(payload.teamId || '');
@@ -432,6 +458,7 @@ function submitReflection(classId, payload) {
     var rowData = [id, state.sessionId, teamId, area, reason, new Date().toISOString()];
     if (rowIndex > 0) sheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
     else sheet.appendRow(rowData);
+    clearSnapCache_(classId);
     return {ok: true};
   } finally {
     lock.releaseLock();
