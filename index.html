@@ -762,7 +762,7 @@ function feedbackChecklist(currentTeamId) {
     var inner = docs.length
       ? docs.map(feedbackDetailHtml).join('')
       : '<p class="muted">아직 제출한 학생이 없어요.</p>';
-    return '<details class="fb-row"><summary><span>' + esc(t.name) + '</span>' +
+    return '<details class="fb-row"' + panelOpenAttr('chk_'+t.id) + panelToggleAttr('chk_'+t.id) + '><summary><span>' + esc(t.name) + '</span>' +
       '<span class="tag ' + (docs.length?'tag-done':'tag-pending') + '">' + docs.length + '명 제출</span></summary>' + inner + '</details>';
   }).join('');
   return '<div class="panel"><h3>피드백 제출 현황 <span class="mono">' + totalCount + '명</span></h3>' + rows + '</div>';
@@ -782,7 +782,7 @@ function feedbackLogPanel() {
     var tagText = d.approved===true ? '의견 공개' : (d.approved===false ? '의견 비공개' : '검토 대기');
     var tagClass = d.approved===true ? 'tag-done' : (d.approved===false ? 'tag-pending' : '');
     var fromLabel = esc(teamName(d.fromTeamId)) + (d.fromStudent ? ' (' + esc(d.fromStudent) + ')' : '');
-    return '<details class="fb-row"><summary><span>' + fromLabel + ' → ' + esc(teamName(d.toTeamId)) + '</span>' +
+    return '<details class="fb-row"' + panelOpenAttr('log_'+d.id) + panelToggleAttr('log_'+d.id) + '><summary><span>' + fromLabel + ' → ' + esc(teamName(d.toTeamId)) + '</span>' +
       '<span class="tag ' + tagClass + '">' + tagText + '</span></summary>' + feedbackDetailHtml(d) + '</details>';
   }).join('');
   return '<details class="panel"' + panelOpenAttr('log') + panelToggleAttr('log') + '><summary>피드백 전체 기록 <span class="mono">' + feedbackDocs.length + '건</span></summary>' + rows + '</details>';
