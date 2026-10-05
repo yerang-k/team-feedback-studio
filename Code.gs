@@ -56,8 +56,9 @@ function registerClass_(classId) {
   }
 }
 
-function deleteClass(classId) {
+function deleteClass(classId, auth) {
   classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   if (classId === 'default') throw new Error('처음 만든 반은 삭제할 수 없어요.');
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -182,18 +183,94 @@ function clearSnapCache_(classId) {
   try { CacheService.getScriptCache().remove(snapCacheKey_(classId, ensureState_(classId).sessionId)); } catch (e) {}
 }
 
-function pinOk_(classId, pin) {
-  var st = getState_(classId) || (classId === 'default' ? getLegacyState_() : null);
-  return !!st && String(pin) === String(st.pin);
+/* ---------- 교사 PIN 확인 · 모둠 입장 확인 ---------- */
+
+function authParts_(auth) {
+  var o = (auth && typeof auth === 'object') ? auth : {pin: auth};
+  return {pin: o.pin == null ? '' : String(o.pin), cid: String(o.cid || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 40) || 'anon'};
+}
+function cacheNum_(cache, key) { return parseInt(cache.get(key) || '0', 10); }
+function cacheBump_(cache, key) { cache.put(key, String(cacheNum_(cache, key) + 1), 600); }
+
+// 교사 PIN 확인. auth는 PIN 문자열 또는 {pin, cid}(cid = 기기 번호).
+// 같은 기기에서 10번 틀리면 10분간, 반 전체에서 100번 틀리면(공격 의심) 아직 인증 안 된 기기는 10분간 막는다.
+function pinOk_(classId, auth, state) {
+  var a = authParts_(auth);
+  var s = state || getState_(classId) || (classId === 'default' ? getLegacyState_() : null);
+  if (!s || !a.pin) return false;
+  var cache = CacheService.getScriptCache();
+  var kc = 'pinfail:c:' + a.cid, kt = 'pintrust:' + a.cid, kg = 'pinfail:all:' + classId;
+  var trusted = cache.get(kt) !== null;
+  if (cacheNum_(cache, kc) >= 10 || (!trusted && cacheNum_(cache, kg) >= 100)) return false;
+  if (a.pin === String(s.pin)) { if (!trusted) cache.put(kt, '1', 3600); return true; }
+  cacheBump_(cache, kc); cacheBump_(cache, kg);
+  return false;
+}
+function pinLocked_(classId, auth) {
+  var a = authParts_(auth), cache = CacheService.getScriptCache();
+  return cacheNum_(cache, 'pinfail:c:' + a.cid) >= 10 ||
+    (cache.get('pintrust:' + a.cid) === null && cacheNum_(cache, 'pinfail:all:' + classId) >= 100);
+}
+function requirePin_(classId, auth) {
+  if (pinOk_(classId, auth)) return;
+  throw new Error(pinLocked_(classId, auth) ? '시도가 너무 많아요. 10분 뒤에 다시 해 주세요.' : 'PIN이 올바르지 않아요. 교사 화면에서 PIN을 다시 입력해 주세요.');
+}
+
+// 모둠 입장: 학생이 입장 코드를 맞게 입력하면 모둠 토큰을 받는다. 이후 제출은 이 토큰으로 '그 모둠 학생'임을 확인한다(입장 코드는 학생에게 내려가지 않는다).
+function findTeam_(state, teamId) {
+  var list = (state && state.teams) || [];
+  for (var i = 0; i < list.length; i++) { if (list[i].id === teamId) return list[i]; }
+  return null;
+}
+function secret_(create) {
+  var props = PropertiesService.getScriptProperties();
+  var sec = props.getProperty('RESEARCH_SECRET');
+  if (!sec && create) {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+    try {
+      sec = props.getProperty('RESEARCH_SECRET');
+      if (!sec) { sec = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('RESEARCH_SECRET', sec); }
+    } finally { lock.releaseLock(); }
+  }
+  return sec || '';
+}
+function teamToken_(classId, team, create) {
+  var sec = secret_(create);
+  if (!sec) return '';
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(classId + '|' + team.id + '|' + team.code, sec)).slice(0, 32);
+}
+function teamOk_(classId, state, teamId, token) {
+  var t = findTeam_(state, String(teamId || ''));
+  var tok = t ? teamToken_(classId, t, false) : '';
+  return !!tok && String(token || '') === tok;
+}
+function requireTeam_(classId, state, teamId, token) {
+  if (!teamOk_(classId, state, teamId, token)) throw new Error('모둠 입장 확인이 필요해요. 화면을 새로고침하고 입장 코드를 다시 입력해 주세요.');
+}
+function joinTeam(classId, teamId, code, cid) {
+  classId = normalizeClassId_(classId);
+  var state = ensureState_(classId);
+  var team = findTeam_(state, String(teamId || ''));
+  if (!team) return {ok: false, message: '모둠을 찾을 수 없어요.'};
+  var c = String(cid || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 40) || 'anon';
+  var cache = CacheService.getScriptCache(), kc = 'joinfail:c:' + c, kt = 'joinfail:t:' + classId + ':' + team.id;
+  if (cacheNum_(cache, kc) >= 10 || cacheNum_(cache, kt) >= 100) return {ok: false, message: '시도가 너무 많아요. 잠시 뒤에 다시 해 주세요.'};
+  var v = String(code || '').trim().toUpperCase();
+  if (!v || v !== String(team.code).toUpperCase()) {
+    cacheBump_(cache, kc); cacheBump_(cache, kt);
+    return {ok: false, message: '코드가 올바르지 않아요. 다시 확인해주세요.'};
+  }
+  return {ok: true, token: teamToken_(classId, team, true), name: team.name};
 }
 
 /* ---------- 학생용 피드백 조회·받은 피드백 공개 ---------- */
 
 // 학생·프로젝터 화면용 피드백: 쓴 모둠·학생 이름은 본인 것만 남기고, 한마디(의견)는 교사가 공개한 것과 본인 것만 남긴다.
-function studentFeedbackView_(docs, student) {
+function studentFeedbackView_(docs, student, ownTeam) {
   student = String(student || '');
   return docs.map(function (d) {
-    var own = !!student && String(d.fromStudent) === student;
+    var own = !!ownTeam && !!student && String(d.fromTeamId) === ownTeam && String(d.fromStudent) === student;
     return {
       fromTeamId: own ? d.fromTeamId : '',
       fromStudent: own ? d.fromStudent : '',
@@ -204,6 +281,11 @@ function studentFeedbackView_(docs, student) {
       approved: d.approved,
       submittedAt: d.submittedAt
     };
+  });
+}
+function studentReflectionView_(rows, ownTeam) {
+  return rows.map(function (r) {
+    return (ownTeam && String(r.teamId) === ownTeam) ? r : {teamId: r.teamId, selectedArea: '', reason: '', submittedAt: r.submittedAt};
   });
 }
 
@@ -267,13 +349,18 @@ function getSnapshot(classId, auth) {
   var safeState = JSON.parse(JSON.stringify(state));
   delete safeState.pin; // 학생에게도 가는 조회라 교사 PIN은 내려보내지 않는다
   // 교사(PIN 확인)에게만 피드백 원본을 주고, 학생·프로젝터 화면에는 공개된 것만 내려보낸다.
-  var teacher = !!(auth && auth.pin !== undefined && pinOk_(classId, auth.pin));
-  var feedback = teacher ? rows.feedback : studentFeedbackView_(rows.feedback, auth && auth.student);
+  var a = auth || {};
+  var teacher = !!(a.pin && pinOk_(classId, a, state));
+  var ownTeam = (!teacher && a.team && teamOk_(classId, state, a.team, a.token)) ? String(a.team) : '';
+  if (!teacher) safeState.teams = (safeState.teams || []).map(function (t) { return {id: t.id, name: t.name, slideUrl: t.slideUrl || ''}; }); // 입장 코드는 학생·프로젝터에 내려보내지 않는다
+  var feedback = teacher ? rows.feedback : studentFeedbackView_(rows.feedback, a.student, ownTeam);
+  var reflections = teacher ? rows.reflections : studentReflectionView_(rows.reflections, ownTeam);
   return {
     state: safeState,
     teacher: teacher, // 화면이 '교사로 인정됐는지' 알 수 있게(저장된 PIN이 낡았으면 PIN 입력으로 돌아간다)
+    teamOk: a.team ? (teacher ? undefined : ownTeam !== '') : undefined, // 학생 모둠 확인 결과(입장 코드가 바뀌었으면 다시 입력)
     feedback: feedback,
-    reflections: rows.reflections,
+    reflections: reflections,
     spreadsheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
     webAppUrl: ScriptApp.getService().getUrl(),
     classes: listClasses()
@@ -299,18 +386,19 @@ function readSheetForSession_(sheet, headers, sessionId) {
   return rows;
 }
 
-function teacherLogin(classId, pin) {
+function teacherLogin(classId, pin, cid) {
   classId = normalizeClassId_(classId);
   var state = getState_(classId) || (classId === 'default' ? getLegacyState_() : null);
   if (!state) {
     if (String(pin) === '0000') { ensureState_(classId); return {ok: true}; }
     return {ok: false, message: '최초 PIN은 0000이에요.'};
   }
-  if (String(pin) === String(state.pin)) return {ok: true};
-  return {ok: false, message: 'PIN이 올바르지 않아요.'};
+  var auth = {pin: pin, cid: cid};
+  if (pinOk_(classId, auth, state)) return {ok: true};
+  return {ok: false, message: pinLocked_(classId, auth) ? '시도가 너무 많아요. 10분 뒤에 다시 해 주세요.' : 'PIN이 올바르지 않아요.'};
 }
 
-function updateState(classId, partial) {
+function updateState_(classId, partial) {
   classId = normalizeClassId_(classId);
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -324,7 +412,7 @@ function updateState(classId, partial) {
   }
 }
 
-function newSession(classId) {
+function newSession_(classId) {
   classId = normalizeClassId_(classId);
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -340,15 +428,31 @@ function newSession(classId) {
   }
 }
 
-function saveTeams(classId, teams) {
+// 교사 전용 함수는 PIN(auth)을 확인한 뒤에만 동작한다. updateState_/newSession_는 서버 안에서만 쓰는 PIN 확인 없는 내부 버전이다.
+function updateState(classId, partial, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
+  return updateState_(classId, partial || {});
+}
+function newSession(classId, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
+  return newSession_(classId);
+}
+
+function saveTeams(classId, teams, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   var cleaned = (teams || [])
     .map(function (t) { return {id: String(t.id), name: String(t.name || '').trim(), code: String(t.code || '').trim(), slideUrl: String(t.slideUrl || '').trim()}; })
     .filter(function (t) { return t.name && t.code; });
   if (!cleaned.length) throw new Error('팀은 최소 1개 이상 필요해요.');
-  return updateState(classId, {teams: cleaned});
+  return updateState_(classId, {teams: cleaned});
 }
 
-function saveOptionCatalog(classId, payload) {
+function saveOptionCatalog(classId, payload, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   function clean(list, prefix) {
     return (list || [])
       .map(function (o, i) { return {id: o.id || (prefix + (i + 1)), label: String(o.label || '').trim()}; })
@@ -358,20 +462,24 @@ function saveOptionCatalog(classId, payload) {
   var improvements = clean(payload.improvements, 'i');
   if (!strengths.length) throw new Error('강점 선택지가 1개 이상 필요해요.');
   if (!improvements.length) throw new Error('개선점 선택지가 1개 이상 필요해요.');
-  return updateState(classId, {strengths: strengths, improvements: improvements});
+  return updateState_(classId, {strengths: strengths, improvements: improvements});
 }
 
-function saveAppSettings(classId, payload) {
+function saveAppSettings(classId, payload, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   var appName = String(payload.appName || '').trim();
   var appSubtitle = String(payload.appSubtitle || '').trim();
   if (!appName) throw new Error('앱 이름을 입력해주세요.');
-  return updateState(classId, {appName: appName, appSubtitle: appSubtitle});
+  return updateState_(classId, {appName: appName, appSubtitle: appSubtitle});
 }
 
-function changePin(classId, newPin) {
+function changePin(classId, newPin, auth) {
+  classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   var v = String(newPin || '').trim();
   if (!v) throw new Error('새 PIN을 입력해주세요.');
-  return updateState(classId, {pin: v});
+  return updateState_(classId, {pin: v});
 }
 
 function setTeamSlideUrl(classId, payload) {
@@ -380,6 +488,7 @@ function setTeamSlideUrl(classId, payload) {
   lock.waitLock(10000);
   try {
     var state = ensureState_(classId);
+    requireTeam_(classId, state, payload.teamId, payload.token);
     var teamId = String(payload.teamId || '');
     var url = String(payload.slideUrl || '').trim();
     var team = null;
@@ -421,6 +530,7 @@ function uploadTeamSlide(classId, payload) {
   classId = normalizeClassId_(classId);
   var teamId = String(payload.teamId || '');
   var team = null, st = ensureState_(classId);
+  requireTeam_(classId, st, payload.teamId, payload.token);
   for (var i = 0; i < st.teams.length; i++) { if (st.teams[i].id === teamId) { team = st.teams[i]; break; } }
   if (!team) throw new Error('팀을 찾을 수 없어요.');
 
@@ -451,8 +561,9 @@ function uploadTeamSlide(classId, payload) {
   return {ok: true, fileUrl: file.getUrl()};
 }
 
-function setApproval(classId, id, approved) {
+function setApproval(classId, id, approved, auth) {
   classId = normalizeClassId_(classId);
+  requirePin_(classId, auth);
   var lock = sheetLock_();
   lock.waitLock(30000);
   try {
@@ -475,6 +586,7 @@ function submitFeedback(classId, payload) {
   lock.waitLock(30000);
   try {
     var state = ensureState_(classId);
+    requireTeam_(classId, state, payload.fromTeamId, payload.token);
     var strengths = (payload.strengths || []).slice(0, 2);
     var improvements = (payload.improvements || []).slice(0, 2);
     var comment = String(payload.comment || '').trim();
@@ -514,6 +626,7 @@ function submitReflection(classId, payload) {
   lock.waitLock(30000);
   try {
     var state = ensureState_(classId);
+    requireTeam_(classId, state, payload.teamId, payload.token);
     var teamId = String(payload.teamId || '');
     var area = String(payload.selectedArea || '').trim();
     var reason = String(payload.reason || '').trim();

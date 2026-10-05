@@ -301,9 +301,11 @@ function barsHtml(tallyArr, colorClass) {
 /* ---------- 서버 폴링 ---------- */
 function getPin() { try { return sessionStorage.getItem('rs_teacher_pin__' + CLASS_ID) || ''; } catch (e) { return ''; } }
 function savePin(v) { try { sessionStorage.setItem('rs_teacher_pin__' + CLASS_ID, v); } catch (e) {} }
+var CID = (function () { try { var c = localStorage.getItem('rs_cid'); if (!c) { c = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('rs_cid', c); } return c; } catch (e) { return 'x' + Math.random().toString(36).slice(2); } })(); // 이 기기의 임의 번호(PIN 실패 횟수를 기기별로 세는 데 씀)
+function tAuth() { return {pin: getPin(), cid: CID}; }
 function snapAuth() {
-  if (myRole === 'teacher') return {pin: getPin()};
-  return {student: myStudent ? myStudent.label : '', team: myTeam ? myTeam.id : ''};
+  if (myRole === 'teacher') { var p = getPin(); return p ? {pin: p, cid: CID} : {}; }
+  return {student: myStudent ? myStudent.label : '', team: myTeam ? myTeam.id : '', token: myTeam ? (myTeam.token || '') : ''};
 }
 function pollSnapshot() {
   google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot(CLASS_ID, snapAuth());
@@ -313,6 +315,10 @@ function onSnapshot(snap) {
   spreadsheetUrl = snap.spreadsheetUrl; webAppUrl = snap.webAppUrl; classList = snap.classes || classList;
   if (myRole === 'teacher' && teacherAuthed && snap.teacher === false) { // 다른 기기에서 PIN이 바뀌었다 → 다시 입력
     teacherAuthed = false; try { sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID); } catch (e) {}
+  }
+  if (myRole === 'student' && myTeam && snap.teamOk === false) { // 입장 코드가 바뀌었거나 이전 방식으로 입장한 기기 → 코드를 다시 입력
+    pendingTeamId = myTeam.id; authError = '입장 코드를 다시 입력해 주세요.'; myTeam = null; recvOpen = false;
+    try { localStorage.removeItem('rs_team__' + CLASS_ID); } catch (e) {}
   }
   if (recvOpen && myTeam && !recvLoading && recvKey() !== recvKeyAt) loadReceived();
   if (state.strengths) STRENGTHS = state.strengths;
@@ -419,17 +425,18 @@ function studentTeamAuth() {
 window.selectPendingTeam = function (id) { pendingTeamId = id; authError = ''; render(); };
 window.backToTeamGrid = function () { pendingTeamId = null; render(); };
 window.submitTeamAuth = function () {
-  var val = (drafts.teamCode || '').trim().toUpperCase();
-  var team = state.teams.filter(function(t){return t.id===pendingTeamId;})[0];
-  if (val && team && val === (team.code || '').toUpperCase()) {
-    myTeam = {id: team.id, name: team.name};
-    saveLocal('rs_team__' + CLASS_ID, myTeam);
-    pendingTeamId = null; authError = ''; drafts.teamCode = '';
+  var val = (drafts.teamCode || '').trim(), id = pendingTeamId;
+  if (!val || !id) { authError = '코드가 올바르지 않아요. 다시 확인해주세요.'; render(); return; }
+  google.script.run.withSuccessHandler(function (res) {
+    if (res && res.ok) {
+      myTeam = {id: id, name: res.name, token: res.token};
+      saveLocal('rs_team__' + CLASS_ID, myTeam);
+      pendingTeamId = null; authError = ''; drafts.teamCode = '';
+    } else {
+      authError = (res && res.message) || '코드가 올바르지 않아요. 다시 확인해주세요.';
+    }
     render();
-  } else {
-    authError = '코드가 올바르지 않아요. 다시 확인해주세요.';
-    render();
-  }
+  }).withFailureHandler(function () { authError = '오류가 발생했어요. 잠시 뒤 다시 해 주세요.'; render(); }).joinTeam(CLASS_ID, id, val, CID);
 };
 function studentShell(bodyHtml) {
   return '<header class="sbar"><span class="sbar-brand">' + esc(APP_NAME) + ' <span class="sbar-tagline">' + esc(APP_SUBTITLE) + '</span><span class="class-badge">' + esc(classLabel()) + '</span></span>' +
@@ -487,7 +494,7 @@ window.uploadMySlideFile = function () {
             if (/permission|auth|권한/i.test(msg)) msg = '선생님 계정에서 아직 드라이브 접근을 승인하지 않은 것 같아요. 선생님께 앱 링크를 다시 열어 권한 승인을 부탁드리세요. (' + msg + ')';
             setSlideError(msg);
           })
-          .uploadTeamSlide(CLASS_ID, {teamId: myTeam.id, filename: file.name, mimeType: file.type || 'application/octet-stream', base64Data: base64});
+          .uploadTeamSlide(CLASS_ID, {teamId: myTeam.id, token: myTeam.token, filename: file.name, mimeType: file.type || 'application/octet-stream', base64Data: base64});
       } catch (e2) { setSlideError('업로드 준비 중 오류: ' + (e2 && e2.message ? e2.message : e2)); }
     };
     reader.onerror = function () { setSlideError('파일을 읽는 데 실패했어요.'); };
@@ -497,7 +504,7 @@ window.uploadMySlideFile = function () {
 window.saveMySlideUrl = function () {
   var url = (drafts.mySlideUrl != null ? drafts.mySlideUrl : '').trim();
   google.script.run.withSuccessHandler(function(){ drafts.mySlideUrl = null; pollSnapshot(); })
-    .withFailureHandler(alertErr).setTeamSlideUrl(CLASS_ID, {teamId: myTeam.id, slideUrl: url});
+    .withFailureHandler(alertErr).setTeamSlideUrl(CLASS_ID, {teamId: myTeam.id, token: myTeam.token, slideUrl: url});
 };
 function studentBody() {
   if (!state) return '<div class="center-msg">수업이 아직 준비되지 않았어요. 선생님을 기다려주세요.</div>';
@@ -574,7 +581,7 @@ window.submitFeedback = function (toTeamId) {
   google.script.run
     .withSuccessHandler(function(){ setFbError(''); pollSnapshot(); })
     .withFailureHandler(function(err){ setFbError(err && err.message ? err.message : '제출에 실패했어요. 다시 시도해주세요.'); })
-    .submitFeedback(CLASS_ID, {fromTeamId: myTeam.id, fromStudent: myStudent.label, toTeamId: toTeamId, strengths: d.strengths, improvements: d.improvements, comment: comment});
+    .submitFeedback(CLASS_ID, {fromTeamId: myTeam.id, token: myTeam.token, fromStudent: myStudent.label, toTeamId: toTeamId, strengths: d.strengths, improvements: d.improvements, comment: comment});
 };
 function studentResult() {
   var id = state.currentTeamId;
@@ -679,7 +686,7 @@ window.submitReflection = function () {
   google.script.run
     .withSuccessHandler(function(){ setRefError(''); pollSnapshot(); })
     .withFailureHandler(function(err){ setRefError(err && err.message ? err.message : '제출에 실패했어요.'); })
-    .submitReflection(CLASS_ID, {teamId: myTeam.id, selectedArea: d.area, reason: reason});
+    .submitReflection(CLASS_ID, {teamId: myTeam.id, token: myTeam.token, selectedArea: d.area, reason: reason});
 };
 
 /* ---------- 교사 화면 ---------- */
@@ -700,7 +707,7 @@ window.submitTeacherPin = function () {
   google.script.run.withSuccessHandler(function(res){
     if (res.ok) { teacherAuthed = true; sessionStorage.setItem('rs_teacher_ok__' + CLASS_ID, '1'); savePin(val); drafts.pin = ''; pollSnapshot(); }
     else setPinError(res.message || 'PIN이 올바르지 않아요.');
-  }).withFailureHandler(function(){ setPinError('오류가 발생했어요.'); }).teacherLogin(CLASS_ID, val);
+  }).withFailureHandler(function(){ setPinError('오류가 발생했어요.'); }).teacherLogin(CLASS_ID, val, CID);
 };
 
 function screenTeacherDashboard() {
@@ -717,7 +724,7 @@ function teacherShell(body) {
 }
 window.newSession = function () {
   if (!confirm('이전 피드백 데이터를 이번 세션에서 분리하고 새로운 수업을 시작할까요? 기존 데이터는 삭제되지 않고 시트에 그대로 남아요.')) return;
-  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).newSession(CLASS_ID);
+  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).newSession(CLASS_ID, tAuth());
 };
 function onStateUpdated(newState) {
   state = newState;
@@ -773,7 +780,7 @@ window.goToClass = function (id) {
 };
 window.deleteClassPrompt = function (id) {
   if (!confirm('"' + id + '" 반을 목록에서 삭제할까요?\n\n그동안 쌓인 피드백·성찰 기록은 구글 시트에 그대로 남고, 이 반의 현재 설정(모둠 이름·코드·PIN 등)만 사라집니다. 같은 이름으로 다시 만들면 새 반으로 시작해요.')) return;
-  google.script.run.withSuccessHandler(function(){ pollSnapshot(); }).withFailureHandler(alertErr).deleteClass(id);
+  google.script.run.withSuccessHandler(function(){ pollSnapshot(); }).withFailureHandler(alertErr).deleteClass(id, tAuth());
 };
 window.goToNewClass = function () {
   var v = (drafts.newClass || '').trim();
@@ -804,9 +811,9 @@ function phaseSwitcher() {
 window.pickCurrentTeam = function (id) {
   if (id === state.currentTeamId) return;
   // 발표팀을 바꾸면 어느 단계에 있었든 새 팀의 '발표'부터 시작(피드백 중에 다른 팀을 눌러도 진행이 꼬이지 않게)
-  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState(CLASS_ID, {currentTeamId: id, phase: 'PRESENTATION'});
+  google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState(CLASS_ID, {currentTeamId: id, phase: 'PRESENTATION'}, tAuth());
 };
-window.setPhase = function (p) { google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState(CLASS_ID, {phase: p}); };
+window.setPhase = function (p) { google.script.run.withSuccessHandler(onStateUpdated).withFailureHandler(alertErr).updateState(CLASS_ID, {phase: p}, tAuth()); };
 function phaseControls() {
   if (state.phase === 'FEEDBACK' && state.currentTeamId) return feedbackChecklist(state.currentTeamId);
   return '';
@@ -856,7 +863,7 @@ window.setReceivedRelease = function (on) {
   google.script.run.withSuccessHandler(function (r) {
     if (!r || !r.ok) { alertErr({message: (r && r.message) || '바꾸지 못했어요.'}); return; }
     state = r.state; render(); pollSnapshot();
-  }).withFailureHandler(alertErr).setReceivedRelease(CLASS_ID, getPin(), on);
+  }).withFailureHandler(alertErr).setReceivedRelease(CLASS_ID, tAuth(), on);
 };
 function commentReviewPanel() {
   var pending = feedbackDocs.filter(function(d){ return d.approved===null && d.comment && d.comment.trim(); });
@@ -869,7 +876,7 @@ function commentReviewPanel() {
         '<button class="btn btn-ghost btn-sm" onclick="setApproval(\'' + d.id + '\',false)">비공개</button></div></div>';
     }).join('') : '<p class="muted">검토할 새 의견이 없어요.</p>') + '</details>';
 }
-window.setApproval = function (id, val) { google.script.run.withSuccessHandler(pollSnapshot).withFailureHandler(alertErr).setApproval(CLASS_ID, id, val); };
+window.setApproval = function (id, val) { google.script.run.withSuccessHandler(pollSnapshot).withFailureHandler(alertErr).setApproval(CLASS_ID, id, val, tAuth()); };
 
 function reflectionStatusPanel() {
   var rows = state.teams.map(function(t){
@@ -912,7 +919,7 @@ window.addDraftTeam = function () {
 window.removeDraftTeam = function (i) { drafts.draftTeams.splice(i, 1); render(); };
 window.saveTeams = function () {
   google.script.run.withSuccessHandler(function(newState){ drafts.draftTeams = null; onStateUpdated(newState); })
-    .withFailureHandler(alertErr).saveTeams(CLASS_ID, drafts.draftTeams || state.teams);
+    .withFailureHandler(alertErr).saveTeams(CLASS_ID, drafts.draftTeams || state.teams, tAuth());
 };
 function appSettingsPanel() {
   var name = drafts.appName != null ? drafts.appName : state.appName;
@@ -928,7 +935,7 @@ window.saveAppSettings = function () {
   var sub = (drafts.appSubtitle != null ? drafts.appSubtitle : (state.appSubtitle || '')).trim();
   if (!name) { alert('앱 이름을 입력해주세요.'); return; }
   google.script.run.withSuccessHandler(function(newState){ drafts.appName=null; drafts.appSubtitle=null; onStateUpdated(newState); })
-    .withFailureHandler(alertErr).saveAppSettings(CLASS_ID, {appName:name, appSubtitle:sub});
+    .withFailureHandler(alertErr).saveAppSettings(CLASS_ID, {appName:name, appSubtitle:sub}, tAuth());
 };
 
 function optionCatalogPanel() {
@@ -967,7 +974,7 @@ window.saveOptionCatalog = function () {
   var s = drafts.draftStrengths || STRENGTHS;
   var i = drafts.draftImprovements || IMPROVEMENTS;
   google.script.run.withSuccessHandler(function(newState){ drafts.draftStrengths=null; drafts.draftImprovements=null; onStateUpdated(newState); })
-    .withFailureHandler(alertErr).saveOptionCatalog(CLASS_ID, {strengths:s, improvements:i});
+    .withFailureHandler(alertErr).saveOptionCatalog(CLASS_ID, {strengths:s, improvements:i}, tAuth());
 };
 
 function pinPanel() {
@@ -978,8 +985,8 @@ function pinPanel() {
 window.changePin = function () {
   var v = (drafts.newPin || '').trim();
   if (!v) { alert('새 PIN을 입력해주세요.'); return; }
-  google.script.run.withSuccessHandler(function(newState){ drafts.newPin=''; onStateUpdated(newState); alert('PIN이 변경되었어요.'); })
-    .withFailureHandler(alertErr).changePin(CLASS_ID, v);
+  google.script.run.withSuccessHandler(function(newState){ drafts.newPin=''; savePin(v); onStateUpdated(newState); alert('PIN이 변경되었어요.'); })
+    .withFailureHandler(alertErr).changePin(CLASS_ID, v, tAuth());
 };
 
 function screenStageOnly() {
