@@ -27,6 +27,7 @@ function doGet(e) {
   tmpl.initialRole = role;
   tmpl.initialView = view;
   tmpl.initialClass = classId;
+  tmpl.classFromUrl = String((e && e.parameter && e.parameter['class']) || '').trim() !== ''; // 주소에 반이 있었는가(없으면 학생은 첫 화면에서 반을 고른다)
   tmpl.appName = state.appName;
   tmpl.appSubtitle = state.appSubtitle;
   return tmpl.evaluate()
@@ -47,6 +48,9 @@ function listClasses() {
   if (raw) { try { list = JSON.parse(raw) || []; } catch (e) { list = []; } }
   return list;
 }
+
+// 학생 첫 화면의 반 선택용(로그인 전에도 부른다). 반 이름만 내려간다.
+function getClassList() { return {ok: true, classes: listClasses()}; }
 
 function registerClass_(classId) {
   var list = listClasses();
