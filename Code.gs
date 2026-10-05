@@ -182,9 +182,76 @@ function clearSnapCache_(classId) {
   try { CacheService.getScriptCache().remove(snapCacheKey_(classId, ensureState_(classId).sessionId)); } catch (e) {}
 }
 
+function pinOk_(classId, pin) {
+  var st = getState_(classId) || (classId === 'default' ? getLegacyState_() : null);
+  return !!st && String(pin) === String(st.pin);
+}
+
+/* ---------- 학생용 피드백 조회·받은 피드백 공개 ---------- */
+
+// 학생·프로젝터 화면용 피드백: 쓴 모둠·학생 이름은 본인 것만 남기고, 한마디(의견)는 교사가 공개한 것과 본인 것만 남긴다.
+function studentFeedbackView_(docs, student) {
+  student = String(student || '');
+  return docs.map(function (d) {
+    var own = !!student && String(d.fromStudent) === student;
+    return {
+      fromTeamId: own ? d.fromTeamId : '',
+      fromStudent: own ? d.fromStudent : '',
+      toTeamId: d.toTeamId,
+      strengths: d.strengths,
+      improvements: d.improvements,
+      comment: (own || d.approved === true) ? d.comment : '',
+      approved: d.approved,
+      submittedAt: d.submittedAt
+    };
+  });
+}
+
+// 교사가 이번 수업의 '받은 피드백'을 학생에게 공개/비공개한다. 공개한 수업 id는 새 수업을 시작해도 남아, 학생이 지난 수업 기록을 다시 볼 수 있다.
+function setReceivedRelease(classId, pin, on) {
+  classId = normalizeClassId_(classId);
+  if (!pinOk_(classId, pin)) return {ok: false, message: 'PIN이 올바르지 않아요.'};
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var state = ensureState_(classId);
+    var list = (state.releasedSessions || []).filter(function (id) { return id !== state.sessionId; });
+    if (on) list.push(state.sessionId);
+    state.releasedSessions = list.slice(-50);
+    saveState_(classId, state);
+    var safe = JSON.parse(JSON.stringify(state));
+    delete safe.pin;
+    return {ok: true, state: safe};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 학생이 '우리 모둠이 받은 피드백'을 본다. 교사가 공개한 수업의 것만, 쓴 사람 정보 없이, 교사가 공개한 한마디만 내려간다(프로젝터에 공개되는 범위와 같다).
+function getMyFeedback(classId, teamId) {
+  classId = normalizeClassId_(classId);
+  var state = ensureState_(classId);
+  var released = state.releasedSessions || [];
+  teamId = String(teamId || '');
+  var values = feedbackSheet_(classId).getDataRange().getValues();
+  var by = {};
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var sid = String(row[1]);
+    if (String(row[3]) !== teamId || released.indexOf(sid) < 0) continue;
+    var s = by[sid] || (by[sid] = {sessionId: sid, startedAt: Number(sid.slice(1)) || 0, count: 0, strengths: {}, improvements: {}, comments: []});
+    s.count++;
+    String(row[4] || '').split('|').filter(Boolean).forEach(function (id) { s.strengths[id] = (s.strengths[id] || 0) + 1; });
+    String(row[5] || '').split('|').filter(Boolean).forEach(function (id) { s.improvements[id] = (s.improvements[id] || 0) + 1; });
+    if (row[7] === true && String(row[6] || '').trim()) s.comments.push(String(row[6]).trim());
+  }
+  var sessions = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.startedAt - a.startedAt; });
+  return {ok: true, currentSessionId: state.sessionId, currentReleased: released.indexOf(state.sessionId) > -1, sessions: sessions};
+}
+
 /* ---------- 클라이언트 호출용 함수 ---------- */
 
-function getSnapshot(classId) {
+function getSnapshot(classId, auth) {
   classId = normalizeClassId_(classId);
   var state = ensureState_(classId);
   // 모두가 3초마다 부르는 함수라 시트 읽기 결과를 4초 캐시한다(제출·승인 때는 캐시를 비운다).
@@ -197,9 +264,15 @@ function getSnapshot(classId) {
     };
     try { cache.put(key, JSON.stringify(rows), 4); } catch (e) {} // 100KB 넘으면 캐시 없이 그대로 동작
   }
+  var safeState = JSON.parse(JSON.stringify(state));
+  delete safeState.pin; // 학생에게도 가는 조회라 교사 PIN은 내려보내지 않는다
+  // 교사(PIN 확인)에게만 피드백 원본을 주고, 학생·프로젝터 화면에는 공개된 것만 내려보낸다.
+  var teacher = !!(auth && auth.pin !== undefined && pinOk_(classId, auth.pin));
+  var feedback = teacher ? rows.feedback : studentFeedbackView_(rows.feedback, auth && auth.student);
   return {
-    state: state,
-    feedback: rows.feedback,
+    state: safeState,
+    teacher: teacher, // 화면이 '교사로 인정됐는지' 알 수 있게(저장된 PIN이 낡았으면 PIN 입력으로 돌아간다)
+    feedback: feedback,
     reflections: rows.reflections,
     spreadsheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
     webAppUrl: ScriptApp.getService().getUrl(),
@@ -243,6 +316,7 @@ function updateState(classId, partial) {
   lock.waitLock(10000);
   try {
     var state = ensureState_(classId);
+    delete partial.releasedSessions; // 공개 목록은 setReceivedRelease(PIN 확인)로만 바꾼다
     Object.keys(partial).forEach(function (k) { state[k] = partial[k]; });
     return saveState_(classId, state);
   } finally {
