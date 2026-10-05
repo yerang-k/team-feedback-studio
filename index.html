@@ -195,6 +195,8 @@ var APP_SUBTITLE = <?!= JSON.stringify(appSubtitle) ?>;
 var INITIAL_ROLE = <?!= JSON.stringify(initialRole) ?>;
 var INITIAL_VIEW = <?!= JSON.stringify(initialView) ?>;
 var CLASS_ID = <?!= JSON.stringify(initialClass) ?>;
+var CLASS_FROM_URL = <?!= JSON.stringify(classFromUrl) ?>; // 주소에 ?class= 가 있었는가(없으면 학생은 첫 화면에서 반을 고른다)
+var INITIAL_CLASS = CLASS_ID, classChosen = CLASS_FROM_URL, savedClass = null, classListData = null, classListError = '';
 var REFLECTION_AREAS = ['문제를 바라보는 방식','자료를 찾고 활용하는 방식','문제의 원인 분석','해결 방안','해결 방안의 실현 가능성','발표/매체','다른 관점','특별히 없음'];
 
 /* ---------- 전역 상태 ---------- */
@@ -308,6 +310,7 @@ function snapAuth() {
   return {student: myStudent ? myStudent.label : '', team: myTeam ? myTeam.id : '', token: myTeam ? (myTeam.token || '') : ''};
 }
 function pollSnapshot() {
+  if (needClass()) return; // 학생이 아직 반을 고르지 않았으면 조회하지 않는다
   google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot(CLASS_ID, snapAuth());
 }
 function onSnapshot(snap) {
@@ -342,11 +345,13 @@ function render() {
   repositionSlideFrame();
 }
 
-window.chooseRole = function (role) { myRole = role; localStorage.setItem('rs_role', role); render(); };
+window.chooseRole = function (role) { myRole = role; localStorage.setItem('rs_role', role); if (role === 'student') resolveStudentClass(); render(); };
 window.switchRole = function () {
   localStorage.removeItem('rs_role'); localStorage.removeItem('rs_team__' + CLASS_ID); localStorage.removeItem('rs_student__' + CLASS_ID);
   sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID);
   myRole = null; myTeam = null; myStudent = null; teacherAuthed = false; pendingTeamId = null;
+  try { localStorage.removeItem('rs_class'); } catch (e) {}
+  CLASS_ID = INITIAL_CLASS; classChosen = CLASS_FROM_URL; savedClass = null; state = null; feedbackDocs = []; reflectionDocs = [];
   render();
 };
 window.switchTeam = function () {
@@ -354,6 +359,57 @@ window.switchTeam = function () {
   myTeam = null; myStudent = null; pendingTeamId = null; render();
 };
 window.switchStudent = function () { localStorage.removeItem('rs_student__' + CLASS_ID); myStudent = null; render(); };
+
+/* ---------- 학생 첫 화면: 반 선택 ---------- */
+function needClass() { return myRole === 'student' && !classChosen; }
+// 반을 바꿀 때 화면 상태를 그 반 기준으로 다시 맞춘다(입장 기록은 반마다 따로 저장돼 있어, 이전에 입장한 반이면 바로 들어간다)
+function enterClass(id) {
+  CLASS_ID = id; classChosen = true;
+  try { localStorage.setItem('rs_class', id); } catch (e) {}
+  state = null; feedbackDocs = []; reflectionDocs = []; recvOpen = false; recvData = null; pendingTeamId = null; authError = '';
+  myTeam = loadLocal('rs_team__' + CLASS_ID, null); myStudent = loadLocal('rs_student__' + CLASS_ID, null);
+  drafts.feedback = {forKey: null, strengths: [], improvements: [], comment: ''}; drafts.reflection = {forKey: null, area: '', reason: ''};
+  drafts.teamCode = ''; drafts.studentNo = ''; drafts.studentName = ''; drafts.mySlideUrl = null;
+  render(); pollSnapshot();
+}
+window.enterClass = enterClass;
+function resolveStudentClass() {
+  if (CLASS_FROM_URL) { classChosen = true; return; }
+  var saved = null; try { saved = localStorage.getItem('rs_class'); } catch (e) {}
+  if (!saved && loadLocal('rs_team__default', null)) saved = 'default'; // 반 구분 없는 주소로 이미 입장했던 기기
+  savedClass = saved; classChosen = false; loadClassList();
+}
+function loadClassList() {
+  classListError = '';
+  google.script.run.withSuccessHandler(function (r) {
+    classListData = (r && r.classes) || [];
+    if (savedClass) { // 지난번에 고른 반이 아직 있으면 바로 들어간다(선생님이 지운 반이면 다시 고르게 한다)
+      var s = savedClass; savedClass = null;
+      if (classListData.indexOf(s) > -1) { enterClass(s); return; }
+      try { localStorage.removeItem('rs_class'); } catch (e) {}
+    }
+    render();
+  }).withFailureHandler(function () { classListError = '반 목록을 불러오지 못했어요. 잠시 뒤 다시 눌러 주세요.'; savedClass = null; render(); }).getClassList();
+}
+window.reloadClassList = function () { loadClassList(); render(); };
+window.switchClass = function () {
+  try { localStorage.removeItem('rs_class'); } catch (e) {}
+  classChosen = false; savedClass = null; CLASS_ID = INITIAL_CLASS;
+  state = null; feedbackDocs = []; reflectionDocs = []; myTeam = null; myStudent = null; recvOpen = false; recvData = null; pendingTeamId = null;
+  loadClassList(); render();
+};
+function screenClassPick() {
+  var body;
+  if (savedClass || (!classListData && !classListError)) body = '<p class="muted">불러오는 중이에요…</p>';
+  else if (classListError) body = '<p class="form-error">' + esc(classListError) + '</p><div class="landing-actions"><button class="btn btn-primary btn-block" onclick="reloadClassList()">다시 불러오기</button></div>';
+  else if (!classListData.length) body = '<p class="muted">아직 만들어진 반이 없어요.<br>선생님께 문의해 주세요.</p>';
+  else body = '<div class="team-grid">' + classListData.map(function(c){
+    return '<button class="btn-team" onclick="enterClass(\'' + esc(c) + '\')">' + esc(c === 'default' ? '처음 만든 반' : c) + '</button>';
+  }).join('') + '</div>';
+  return '<div class="landing"><div class="landing-card">' +
+    '<p class="wordmark-eyebrow">주제탐구독서 상호 피드백</p><h1 class="wordmark-sm">우리 반을 선택하세요</h1>' + body +
+    '<div class="landing-actions"><a href="#" class="link-sm" onclick="switchRole();return false;">선생님이신가요? 교사 모드로</a></div></div></div>';
+}
 
 function screenLanding() {
   return '<div class="landing"><div class="landing-card">' +
@@ -367,6 +423,7 @@ function screenLanding() {
 
 /* ---------- 학생 화면 ---------- */
 function screenStudent() {
+  if (needClass()) return screenClassPick();
   if (!myTeam) return studentTeamAuth();
   if (!myStudent) return studentIdentityAuth();
   return studentShell(recvOpen ? receivedView() : studentBody());
@@ -409,6 +466,7 @@ function studentTeamAuth() {
       '<div class="team-grid">' + state.teams.map(function(t){
         return '<button class="btn-team" onclick="selectPendingTeam(\'' + t.id + '\')">' + esc(t.name) + '</button>';
       }).join('') + '</div>' +
+      (CLASS_FROM_URL ? '' : '<a href="#" class="link-sm" onclick="switchClass();return false;">다른 반 선택</a><br>') +
       '<a href="#" class="link-sm" onclick="switchRole();return false;">선생님이신가요? 교사 모드로</a></div></div>';
   }
   var team = state.teams.filter(function(t){return t.id===pendingTeamId;})[0];
@@ -442,6 +500,7 @@ function studentShell(bodyHtml) {
   return '<header class="sbar"><span class="sbar-brand">' + esc(APP_NAME) + ' <span class="sbar-tagline">' + esc(APP_SUBTITLE) + '</span><span class="class-badge">' + esc(classLabel()) + '</span></span>' +
     '<span class="sbar-team">' + esc((teamOf(myTeam.id) || myTeam).name) + ' · ' + esc(myStudent.label) + '</span>' +
     '<a href="#" class="link-sm" onclick="openReceived();return false;">받은 피드백</a>' +
+    (CLASS_FROM_URL ? '' : '<a href="#" class="link-sm" onclick="switchClass();return false;">반 변경</a>') +
     '<a href="#" class="link-sm" onclick="switchStudent();return false;">학생 전환</a>' +
     '<a href="#" class="link-sm" onclick="switchTeam();return false;">모둠 전환</a></header>' +
     '<main class="student-main">' + (recvOpen ? '' : studentSlidePanel()) + bodyHtml + '</main>';
@@ -768,6 +827,8 @@ function classSwitchPanel() {
     '<p class="muted small">반마다 모둠·PIN·피드백 데이터가 완전히 분리됩니다. 학생에게는 이 반의 학생용 링크만 나눠주세요.</p>' +
     '<p class="muted small" style="word-break:break-all">학생용 링크: <span class="mono">' + esc(studentLink) + '</span></p>' +
     '<div class="row-actions"><button class="btn btn-ghost btn-sm" onclick="copyClassLink(\'' + esc(studentLink) + '\')">학생용 링크 복사</button></div>' +
+    '<p class="muted small" style="word-break:break-all;margin-top:.8rem"><b>모든 반 공통 학생 링크</b>(학생이 첫 화면에서 반을 고르고 입장): <span class="mono">' + esc(linkFor({role: 'student'})) + '</span></p>' +
+    '<div class="row-actions"><button class="btn btn-primary btn-sm" onclick="copyClassLink(\'' + esc(linkFor({role: 'student'})) + '\')">공통 링크 복사</button></div>' +
     (others.length ? '<h3 style="margin-top:1rem">다른 반 열기</h3>' + rows : '') +
     '<h3 style="margin-top:1rem">새 반 만들기</h3>' +
     '<div class="row-actions"><input class="input" style="margin-top:0" placeholder="예: 1-3" oninput="drafts.newClass=this.value" value="' + esc(drafts.newClass) + '">' +
@@ -1050,6 +1111,7 @@ function teacherStage() {
 }
 
 /* ---------- 시작 ---------- */
+if (myRole === 'student') resolveStudentClass();
 pollSnapshot();
 setInterval(pollSnapshot, 3000);
 render();
