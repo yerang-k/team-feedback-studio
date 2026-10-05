@@ -203,7 +203,7 @@ if (INITIAL_ROLE) { try { localStorage.setItem('rs_role', INITIAL_ROLE); } catch
 var myRole = INITIAL_ROLE || localStorage.getItem('rs_role');
 var myTeam = loadLocal('rs_team__' + CLASS_ID, null);
 var myStudent = loadLocal('rs_student__' + CLASS_ID, null);
-var teacherAuthed = sessionStorage.getItem('rs_teacher_ok__' + CLASS_ID) === '1';
+var teacherAuthed = sessionStorage.getItem('rs_teacher_ok__' + CLASS_ID) === '1' && !!getPin();
 var pendingTeamId = null, authError = '';
 var chipWarnMsg = '';
 var drafts = {
@@ -299,12 +299,22 @@ function barsHtml(tallyArr, colorClass) {
 }
 
 /* ---------- 서버 폴링 ---------- */
+function getPin() { try { return sessionStorage.getItem('rs_teacher_pin__' + CLASS_ID) || ''; } catch (e) { return ''; } }
+function savePin(v) { try { sessionStorage.setItem('rs_teacher_pin__' + CLASS_ID, v); } catch (e) {} }
+function snapAuth() {
+  if (myRole === 'teacher') return {pin: getPin()};
+  return {student: myStudent ? myStudent.label : '', team: myTeam ? myTeam.id : ''};
+}
 function pollSnapshot() {
-  google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot(CLASS_ID);
+  google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot(CLASS_ID, snapAuth());
 }
 function onSnapshot(snap) {
   state = snap.state; feedbackDocs = snap.feedback; reflectionDocs = snap.reflections;
   spreadsheetUrl = snap.spreadsheetUrl; webAppUrl = snap.webAppUrl; classList = snap.classes || classList;
+  if (myRole === 'teacher' && teacherAuthed && snap.teacher === false) { // 다른 기기에서 PIN이 바뀌었다 → 다시 입력
+    teacherAuthed = false; try { sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID); } catch (e) {}
+  }
+  if (recvOpen && myTeam && !recvLoading && recvKey() !== recvKeyAt) loadReceived();
   if (state.strengths) STRENGTHS = state.strengths;
   if (state.improvements) IMPROVEMENTS = state.improvements;
   if (state.appName) APP_NAME = state.appName;
@@ -329,7 +339,7 @@ function render() {
 window.chooseRole = function (role) { myRole = role; localStorage.setItem('rs_role', role); render(); };
 window.switchRole = function () {
   localStorage.removeItem('rs_role'); localStorage.removeItem('rs_team__' + CLASS_ID); localStorage.removeItem('rs_student__' + CLASS_ID);
-  sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID);
+  sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID);
   myRole = null; myTeam = null; myStudent = null; teacherAuthed = false; pendingTeamId = null;
   render();
 };
@@ -353,7 +363,7 @@ function screenLanding() {
 function screenStudent() {
   if (!myTeam) return studentTeamAuth();
   if (!myStudent) return studentIdentityAuth();
-  return studentShell(studentBody());
+  return studentShell(recvOpen ? receivedView() : studentBody());
 }
 function studentIdentityAuth() {
   var team = teamOf(myTeam.id) || myTeam;
@@ -424,9 +434,10 @@ window.submitTeamAuth = function () {
 function studentShell(bodyHtml) {
   return '<header class="sbar"><span class="sbar-brand">' + esc(APP_NAME) + ' <span class="sbar-tagline">' + esc(APP_SUBTITLE) + '</span><span class="class-badge">' + esc(classLabel()) + '</span></span>' +
     '<span class="sbar-team">' + esc((teamOf(myTeam.id) || myTeam).name) + ' · ' + esc(myStudent.label) + '</span>' +
+    '<a href="#" class="link-sm" onclick="openReceived();return false;">받은 피드백</a>' +
     '<a href="#" class="link-sm" onclick="switchStudent();return false;">학생 전환</a>' +
     '<a href="#" class="link-sm" onclick="switchTeam();return false;">모둠 전환</a></header>' +
-    '<main class="student-main">' + studentSlidePanel() + bodyHtml + '</main>';
+    '<main class="student-main">' + (recvOpen ? '' : studentSlidePanel()) + bodyHtml + '</main>';
 }
 function studentSlidePanel() {
   var team = teamOf(myTeam.id);
@@ -580,6 +591,53 @@ function studentAllResult() {
   }).join('');
   return '<div class="result-view"><p class="eyebrow">오늘 우리가 발견한 탐구들</p>' + rows + '</div>';
 }
+/* ---------- 우리 모둠이 받은 피드백(학생 개인 기기에서 보기) ---------- */
+var recvOpen = false, recvData = null, recvLoading = false, recvError = '', recvKeyAt = '';
+function recvKey() {
+  var approved = feedbackDocs.filter(function(d){ return d.toTeamId===myTeam.id && d.approved===true; }).length;
+  return (state && state.releasedSessions || []).join(',') + '|' + approved;
+}
+function loadReceived() {
+  recvLoading = true; recvError = ''; recvKeyAt = recvKey();
+  google.script.run.withSuccessHandler(function (r) { recvLoading = false; recvData = r; render(); })
+    .withFailureHandler(function () { recvLoading = false; recvError = '불러오지 못했어요. 잠시 뒤 다시 눌러 주세요.'; render(); })
+    .getMyFeedback(CLASS_ID, myTeam.id);
+}
+window.openReceived = function () { recvOpen = true; loadReceived(); render(); };
+window.closeReceived = function () { recvOpen = false; render(); };
+window.reloadReceived = function () { loadReceived(); render(); };
+function countList(counts, catalog) {
+  return Object.keys(counts).map(function(id){ return {id: id, label: labelOf(catalog, id), count: counts[id]}; })
+    .sort(function(a, b){ return b.count - a.count; });
+}
+function recvSessionHtml(s, isCurrent) {
+  var d = new Date(s.startedAt);
+  var title = (s.startedAt ? (d.getMonth() + 1) + '월 ' + d.getDate() + '일 수업' : '지난 수업') + (isCurrent ? ' (이번 수업)' : '');
+  return '<div class="panel" style="margin-top:1rem"><h3>' + esc(title) + '</h3>' +
+    '<p class="muted small">받은 응답 ' + s.count + '개</p>' +
+    '<h3 class="q">강점</h3><div class="bars">' + barsHtml(countList(s.strengths, STRENGTHS).slice(0, 5), 'bar-gold') + '</div>' +
+    '<h3 class="q">개선점</h3><div class="bars">' + barsHtml(countList(s.improvements, IMPROVEMENTS).slice(0, 5), 'bar-clay') + '</div>' +
+    (s.comments.length ? '<h3 class="q">친구들의 한마디</h3><div class="voice-cards">' + s.comments.map(function(c){
+      return '<div class="voice-card-sm">"' + esc(c) + '"</div>';
+    }).join('') + '</div>' : '') + '</div>';
+}
+function receivedView() {
+  var team = teamOf(myTeam.id) || myTeam;
+  var top = '<div class="result-view"><a href="#" class="link-sm" onclick="closeReceived();return false;">← 수업 화면으로</a>' +
+    '<p class="eyebrow">' + esc(team.name) + '</p><h2>우리 모둠이 받은 피드백</h2>';
+  if (!recvData) {
+    return top + (recvError ? '<p class="form-error">' + esc(recvError) + '</p><button class="btn btn-ghost btn-sm" onclick="reloadReceived()">다시 불러오기</button>'
+                            : '<p class="muted">불러오는 중이에요…</p>') + '</div>';
+  }
+  var cur = recvData.currentSessionId;
+  var notice = recvData.currentReleased ? '' :
+    '<div class="submitted-box"><p class="submitted-tag">아직 공개 전이에요</p><p class="muted">이번 수업의 피드백은 선생님이 공개하면 여기에서 볼 수 있어요.</p></div>';
+  var hasCur = recvData.sessions.some(function(s){ return s.sessionId === cur; });
+  var empty = (recvData.currentReleased && !hasCur) ? '<p class="muted" style="margin-top:1rem">이번 수업에서는 아직 받은 피드백이 없어요.</p>' : '';
+  return top + notice + empty + recvData.sessions.map(function(s){ return recvSessionHtml(s, s.sessionId === cur); }).join('') +
+    (recvError ? '<p class="form-error">' + esc(recvError) + '</p>' : '') +
+    '<div class="row-actions" style="margin-top:1rem"><button class="btn btn-ghost btn-sm" onclick="reloadReceived()">새로고침</button></div></div>';
+}
 function studentReflection() {
   var rfKey = state.sessionId + '::' + myTeam.id;
   if (drafts.reflection.forKey !== rfKey) drafts.reflection = {forKey: rfKey, area: '', reason: ''};
@@ -640,7 +698,7 @@ function setPinError(msg) { var el = document.getElementById('pinError'); if (el
 window.submitTeacherPin = function () {
   var val = (drafts.pin || '').trim();
   google.script.run.withSuccessHandler(function(res){
-    if (res.ok) { teacherAuthed = true; sessionStorage.setItem('rs_teacher_ok__' + CLASS_ID, '1'); drafts.pin = ''; pollSnapshot(); }
+    if (res.ok) { teacherAuthed = true; sessionStorage.setItem('rs_teacher_ok__' + CLASS_ID, '1'); savePin(val); drafts.pin = ''; pollSnapshot(); }
     else setPinError(res.message || 'PIN이 올바르지 않아요.');
   }).withFailureHandler(function(){ setPinError('오류가 발생했어요.'); }).teacherLogin(CLASS_ID, val);
 };
@@ -686,7 +744,7 @@ function teacherControlRail() {
     '<p class="muted small" style="margin:.5rem 0 0">전자칠판/프로젝터는 이 창을 복제하지 말고, 화면 확장 후 아래 링크로 연 창을 그쪽으로 옮겨서 쓰세요.</p>' +
     '<p style="margin:.3rem 0 0">' + stageLink + '</p>' +
     phaseControls() + classSwitchPanel() + teamManagementPanel() + optionCatalogPanel() + appSettingsPanel() +
-    commentReviewPanel() + feedbackLogPanel() +
+    commentReviewPanel() + receivedReleasePanel() + feedbackLogPanel() +
     reflectionStatusPanel() + sheetLinkPanel() + pinPanel();
 }
 function classSwitchPanel() {
@@ -787,6 +845,19 @@ function feedbackLogPanel() {
   }).join('');
   return '<details class="panel"' + panelOpenAttr('log') + panelToggleAttr('log') + '><summary>피드백 전체 기록 <span class="mono">' + feedbackDocs.length + '건</span></summary>' + rows + '</details>';
 }
+function receivedReleasePanel() {
+  var on = (state.releasedSessions || []).indexOf(state.sessionId) > -1;
+  return '<div class="panel"><h3>받은 피드백 학생 공개</h3>' +
+    '<p class="muted small">켜면 학생이 자기 모둠이 받은 피드백(교사가 공개한 한마디 포함)을 자기 기기에서 볼 수 있어요. 켠 수업의 기록은 새 수업을 시작해도 학생이 다시 볼 수 있어요.</p>' +
+    '<div class="row-actions"><button class="btn btn-sm ' + (on ? 'btn-primary' : 'btn-ghost') + '" onclick="setReceivedRelease(' + (on ? 'false' : 'true') + ')">' +
+    (on ? '공개 중 · 끄기' : '이번 수업 공개하기') + '</button></div></div>';
+}
+window.setReceivedRelease = function (on) {
+  google.script.run.withSuccessHandler(function (r) {
+    if (!r || !r.ok) { alertErr({message: (r && r.message) || '바꾸지 못했어요.'}); return; }
+    state = r.state; render(); pollSnapshot();
+  }).withFailureHandler(alertErr).setReceivedRelease(CLASS_ID, getPin(), on);
+};
 function commentReviewPanel() {
   var pending = feedbackDocs.filter(function(d){ return d.approved===null && d.comment && d.comment.trim(); });
   return '<details class="panel"' + panelOpenAttr('review') + panelToggleAttr('review') + '><summary>자유 의견 검토 <span class="mono">' + pending.length + '</span></summary>' +
