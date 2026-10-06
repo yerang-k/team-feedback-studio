@@ -281,7 +281,8 @@ function studentFeedbackView_(docs, student, ownTeam) {
       toTeamId: d.toTeamId,
       strengths: d.strengths,
       improvements: d.improvements,
-      comment: (own || d.approved === true) ? d.comment : '',
+      // 받은 모둠 학생(검증된 모둠)에게는 교사가 비공개로 하지 않은 의견을 모두 보여 준다. 그 밖의 사람에게는 교사가 공개한 의견만.
+      comment: (own || d.approved === true || (!!ownTeam && String(d.toTeamId) === ownTeam && d.approved !== false)) ? d.comment : '',
       approved: d.approved,
       submittedAt: d.submittedAt
     };
@@ -313,7 +314,7 @@ function setReceivedRelease(classId, pin, on) {
   }
 }
 
-// 학생이 '우리 모둠이 받은 피드백'을 본다. 교사가 공개한 수업의 것만, 쓴 사람 정보 없이, 교사가 공개한 한마디만 내려간다(프로젝터에 공개되는 범위와 같다).
+// 학생이 '우리 모둠이 받은 피드백'을 본다. 교사가 공개한 수업의 것만, 쓴 사람 정보 없이, 교사가 비공개로 하지 않은 한마디(공개 대기 포함)까지 내려간다.
 function getMyFeedback(classId, teamId) {
   classId = normalizeClassId_(classId);
   var state = ensureState_(classId);
@@ -329,7 +330,7 @@ function getMyFeedback(classId, teamId) {
     s.count++;
     String(row[4] || '').split('|').filter(Boolean).forEach(function (id) { s.strengths[id] = (s.strengths[id] || 0) + 1; });
     String(row[5] || '').split('|').filter(Boolean).forEach(function (id) { s.improvements[id] = (s.improvements[id] || 0) + 1; });
-    if (row[7] === true && String(row[6] || '').trim()) s.comments.push(String(row[6]).trim());
+    if (row[7] !== false && String(row[6] || '').trim()) s.comments.push(String(row[6]).trim()); // 교사가 비공개로 하지 않은 의견(공개 대기 포함)
   }
   var sessions = Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return b.startedAt - a.startedAt; });
   return {ok: true, currentSessionId: state.sessionId, currentReleased: released.indexOf(state.sessionId) > -1, sessions: sessions};

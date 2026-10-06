@@ -208,8 +208,8 @@ if (INITIAL_ROLE) { try { localStorage.setItem('rs_role', INITIAL_ROLE); } catch
 var myRole = INITIAL_ROLE || localStorage.getItem('rs_role');
 var myTeam = loadLocal('rs_team__' + CLASS_ID, null);
 var myStudent = loadLocal('rs_student__' + CLASS_ID, null);
-var teacherAuthed = sessionStorage.getItem('rs_teacher_ok__' + CLASS_ID) === '1' && !!getPin();
-var pendingTeamId = null, authError = '';
+var teacherAuthed = ssGet('rs_teacher_ok__' + CLASS_ID) === '1' && !!getPin();
+var pendingTeamId = null, authError = '', pinErr = '';
 var chipWarnMsg = '';
 var drafts = {
   feedback: {forKey: null, strengths: [], improvements: [], comment: ''},
@@ -303,8 +303,10 @@ function barsHtml(tallyArr, colorClass) {
 }
 
 /* ---------- 서버 폴링 ---------- */
-function getPin() { try { return sessionStorage.getItem('rs_teacher_pin__' + CLASS_ID) || ''; } catch (e) { return ''; } }
-function savePin(v) { try { sessionStorage.setItem('rs_teacher_pin__' + CLASS_ID, v); } catch (e) {} }
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+var PIN_MEM = ''; // 브라우저 저장소가 막혀 있어도 이 화면을 보는 동안은 PIN을 기억한다
+function getPin() { return ssGet('rs_teacher_pin__' + CLASS_ID) || PIN_MEM; }
+function savePin(v) { PIN_MEM = v; try { sessionStorage.setItem('rs_teacher_pin__' + CLASS_ID, v); } catch (e) {} }
 var CID = (function () { try { var c = localStorage.getItem('rs_cid'); if (!c) { c = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('rs_cid', c); } return c; } catch (e) { return 'x' + Math.random().toString(36).slice(2); } })(); // 이 기기의 임의 번호(PIN 실패 횟수를 기기별로 세는 데 씀)
 function tAuth() { return {pin: getPin(), cid: CID}; }
 function snapAuth() {
@@ -313,13 +315,21 @@ function snapAuth() {
 }
 function pollSnapshot() {
   if (needClass()) return; // 학생이 아직 반을 고르지 않았으면 조회하지 않는다
-  google.script.run.withSuccessHandler(onSnapshot).withFailureHandler(function(e){ console.error(e); }).getSnapshot(CLASS_ID, snapAuth());
+  var cls = CLASS_ID, sent = snapAuth();
+  google.script.run.withSuccessHandler(function (snap) { onSnapshot(snap, sent, cls); }).withFailureHandler(function(e){ console.error(e); }).getSnapshot(cls, sent);
 }
-function onSnapshot(snap) {
+function onSnapshot(snap, sent, cls) {
+  // 보낸 뒤에 반·로그인·모둠이 바뀌었다면 그 요청의 응답은 오래된 것이므로 버린다(서버가 느리면 로그인 직후에 PIN 없이 보낸 조회의 응답이 늦게 도착한다)
+  if (cls !== undefined && cls !== CLASS_ID) return;
+  if (sent) {
+    if (myRole === 'teacher' && teacherAuthed && (!sent.pin || sent.pin !== getPin())) return;
+    if (myRole === 'student' && myTeam && (sent.team !== myTeam.id || sent.token !== (myTeam.token || ''))) return;
+  }
   state = snap.state; feedbackDocs = snap.feedback; reflectionDocs = snap.reflections;
   spreadsheetUrl = snap.spreadsheetUrl; webAppUrl = snap.webAppUrl; classList = snap.classes || classList;
   if (myRole === 'teacher' && teacherAuthed && snap.teacher === false) { // 다른 기기에서 PIN이 바뀌었다 → 다시 입력
-    teacherAuthed = false; try { sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID); } catch (e) {}
+    teacherAuthed = false; PIN_MEM = ''; pinErr = 'PIN이 바뀌었거나 맞지 않아요. 다시 입력해 주세요.';
+    try { sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID); } catch (e) {}
   }
   if (myRole === 'student' && myTeam && snap.teamOk === false) { // 입장 코드가 바뀌었거나 이전 방식으로 입장한 기기 → 코드를 다시 입력
     pendingTeamId = myTeam.id; authError = '입장 코드를 다시 입력해 주세요.'; myTeam = null; recvOpen = false;
@@ -350,7 +360,7 @@ function render() {
 window.chooseRole = function (role) { myRole = role; localStorage.setItem('rs_role', role); if (role === 'student') resolveStudentClass(); render(); };
 window.switchRole = function () {
   localStorage.removeItem('rs_role'); delLocal('rs_team__' + CLASS_ID); delLocal('rs_student__' + CLASS_ID);
-  sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID);
+  try { sessionStorage.removeItem('rs_teacher_ok__' + CLASS_ID); sessionStorage.removeItem('rs_teacher_pin__' + CLASS_ID); } catch (e) {} PIN_MEM = '';
   myRole = null; myTeam = null; myStudent = null; teacherAuthed = false; pendingTeamId = null;
   CLASS_ID = INITIAL_CLASS; classChosen = CLASS_FROM_URL; state = null; feedbackDocs = []; reflectionDocs = [];
   render();
@@ -650,7 +660,7 @@ function studentAllResult() {
 /* ---------- 우리 모둠이 받은 피드백(학생 개인 기기에서 보기) ---------- */
 var recvOpen = false, recvData = null, recvLoading = false, recvError = '', recvKeyAt = '';
 function recvKey() {
-  var approved = feedbackDocs.filter(function(d){ return d.toTeamId===myTeam.id && d.approved===true; }).length;
+  var approved = feedbackDocs.filter(function(d){ return d.toTeamId===myTeam.id && d.approved!==false; }).length; // 비공개가 아닌 의견 수가 바뀌면 다시 불러온다
   return (state && state.releasedSessions || []).join(',') + '|' + approved;
 }
 function loadReceived() {
@@ -700,7 +710,7 @@ function studentReflection() {
   var mine = reflectionDocs.filter(function(r){return r.teamId===myTeam.id;})[0];
   var st = tally(feedbackDocs, myTeam.id, 'strengths', STRENGTHS);
   var im = tally(feedbackDocs, myTeam.id, 'improvements', IMPROVEMENTS);
-  var comments = feedbackDocs.filter(function(d){return d.toTeamId===myTeam.id && d.approved===true && d.comment;});
+  var comments = feedbackDocs.filter(function(d){return d.toTeamId===myTeam.id && d.approved!==false && d.comment;});
   var header = '<p class="eyebrow">우리 팀이 받은 피드백</p>' +
     '<h3 class="q">강점</h3><div class="bars">' + barsHtml(st.slice(0,5), 'bar-gold') + '</div>' +
     '<h3 class="q">개선점</h3><div class="bars">' + barsHtml(im.slice(0,5), 'bar-clay') + '</div>' +
@@ -744,17 +754,17 @@ function screenTeacherPin() {
     '<p class="wordmark-eyebrow">교사 모드</p><h1 class="wordmark-sm">PIN을 입력하세요</h1>' +
     (!state ? '<p class="muted">처음 시작하시나요? 기본 PIN은 <b>0000</b>이에요.</p>' : '') +
     '<input type="password" inputmode="numeric" class="input input-lg mono" maxlength="8" placeholder="PIN" value="' + esc(drafts.pin) + '" oninput="drafts.pin=this.value" onkeydown="if(event.key===\'Enter\')submitTeacherPin()">' +
-    '<div class="form-error" id="pinError"></div>' +
+    '<div class="form-error" id="pinError">' + esc(pinErr) + '</div>' +
     '<div class="landing-actions">' +
       '<button class="btn btn-primary btn-block" onclick="submitTeacherPin()">입장</button>' +
       '<a href="#" class="link-sm" onclick="switchRole();return false;">학생 화면으로</a>' +
     '</div></div></div>';
 }
-function setPinError(msg) { var el = document.getElementById('pinError'); if (el) el.textContent = msg; }
+function setPinError(msg) { pinErr = msg; var el = document.getElementById('pinError'); if (el) el.textContent = msg; }
 window.submitTeacherPin = function () {
   var val = (drafts.pin || '').trim();
   google.script.run.withSuccessHandler(function(res){
-    if (res.ok) { teacherAuthed = true; sessionStorage.setItem('rs_teacher_ok__' + CLASS_ID, '1'); savePin(val); drafts.pin = ''; pollSnapshot(); }
+    if (res.ok) { teacherAuthed = true; pinErr = ''; try { sessionStorage.setItem('rs_teacher_ok__' + CLASS_ID, '1'); } catch (e) {} savePin(val); drafts.pin = ''; pollSnapshot(); }
     else setPinError(res.message || 'PIN이 올바르지 않아요.');
   }).withFailureHandler(function(){ setPinError('오류가 발생했어요.'); }).teacherLogin(CLASS_ID, val, CID);
 };
@@ -919,6 +929,7 @@ window.setReceivedRelease = function (on) {
 function commentReviewPanel() {
   var pending = feedbackDocs.filter(function(d){ return d.approved===null && d.comment && d.comment.trim(); });
   return '<details class="panel"' + panelOpenAttr('review') + panelToggleAttr('review') + '><summary>자유 의견 검토 <span class="mono">' + pending.length + '</span></summary>' +
+    '<p class="muted small">새 의견은 받은 모둠 학생에게 바로 보여요. 「비공개」로 하면 숨겨지고, 「공개」로 하면 프로젝터 화면에도 나올 수 있어요.</p>' +
     (pending.length ? pending.map(function(d){
       var fromLabel = esc(teamName(d.fromTeamId)) + (d.fromStudent ? ' (' + esc(d.fromStudent) + ')' : '');
       return '<div class="review-item"><p class="muted small">' + fromLabel + ' → ' + esc(teamName(d.toTeamId)) + '</p>' +
