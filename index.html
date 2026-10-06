@@ -927,7 +927,8 @@ window.setReceivedRelease = function (on) {
   }).withFailureHandler(alertErr).setReceivedRelease(CLASS_ID, tAuth(), on);
 };
 function commentReviewPanel() {
-  var pending = feedbackDocs.filter(function(d){ return d.approved===null && d.comment && d.comment.trim(); });
+  // 서버가 보낸 '처리 전(null)'은 구글 앱스크립트가 화면으로 전달하면서 값 없음(undefined)이 되므로, null이 아니라 '공개도 비공개도 아님'으로 판단한다.
+  var pending = feedbackDocs.filter(function(d){ return d.approved!==true && d.approved!==false && d.comment && d.comment.trim(); });
   return '<details class="panel"' + panelOpenAttr('review') + panelToggleAttr('review') + '><summary>자유 의견 검토 <span class="mono">' + pending.length + '</span></summary>' +
     '<p class="muted small">새 의견은 받은 모둠 학생에게 바로 보여요. 「비공개」로 하면 숨겨지고, 「공개」로 하면 프로젝터 화면에도 나올 수 있어요.</p>' +
     (pending.length ? pending.map(function(d){
